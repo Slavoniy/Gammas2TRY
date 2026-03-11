@@ -5,6 +5,8 @@ from typing import Optional, Dict, Any
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
@@ -178,3 +180,49 @@ async def generate_document(req: GenerateRequest):
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
+
+# Mount the static frontend files
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "static")
+if not os.path.exists(STATIC_DIR):
+    # Fallback to local 'static' if running directly in the container
+    STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+    if not os.path.exists(STATIC_DIR) and os.path.exists("/app/static"):
+        STATIC_DIR = "/app/static"
+
+# When building locally without Docker, the static folder might not exist yet,
+# so we don't strictly require it on app startup. However, in production (Docker)
+# it will be mounted at /app/static
+if not os.path.exists(STATIC_DIR):
+    STATIC_DIR = "/app/static" # Force for docker env
+
+# Add route for the root of the app
+@app.get("/")
+async def serve_index():
+    index_path = os.path.join(STATIC_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"error": "Frontend not found"}
+
+# Attempt to mount /assets if they exist
+try:
+    if os.path.exists(os.path.join(STATIC_DIR, "assets")):
+        app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
+except Exception as e:
+    print(f"Warning: Could not mount static assets: {e}")
+
+# Catch-all route to serve index.html for client-side routing
+@app.get("/{full_path:path}")
+async def serve_frontend_catchall(full_path: str):
+    # Allow API routes to fall through to their 404s if not matched
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    # Also handle things like favicon or other files in the root of dist
+    file_path = os.path.join(STATIC_DIR, full_path)
+    if os.path.isfile(file_path):
+        return FileResponse(file_path)
+
+    index_path = os.path.join(STATIC_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"error": "Frontend not found"}
