@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  backend:
+  app:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
@@ -11,14 +11,3 @@ services:
       # Provide your actual key or use .env file
       - GAMMA_API_KEY=${GAMMA_API_KEY:-sk-gamma-placeholder}
       - MOCK_MODE=${MOCK_MODE:-false}
-    volumes:
-      - ./backend:/app
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
