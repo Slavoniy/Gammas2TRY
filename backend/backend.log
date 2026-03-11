@@ -1,0 +1,8 @@
+INFO:     Started server process [6757]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:58324 - "GET /api/themes HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58326 - "GET /api/themes HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58326 - "OPTIONS /api/generate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58324 - "POST /api/generate HTTP/1.1" 200 OK

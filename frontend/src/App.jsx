@@ -1,0 +1,268 @@
+import React, { useState, useEffect } from 'react';
+import './App.css';
+
+function App() {
+  const [themes, setThemes] = useState([]);
+  const [loadingThemes, setLoadingThemes] = useState(true);
+
+  const [formData, setFormData] = useState({
+    formatDimensions: 'presentation|16x9', // format|dimensions
+    textMode: 'generate',
+    inputText: '',
+    numCards: 10,
+    additionalInstructions: '',
+    amount: 'medium',
+    tone: '',
+    audience: '',
+    language: 'ru',
+    themeId: '',
+    exportAs: 'pdf'
+  });
+
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [downloadLink, setDownloadLink] = useState(null);
+  const [error, setError] = useState(null);
+
+  const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
+  useEffect(() => {
+    fetchThemes();
+  }, []);
+
+  const fetchThemes = async () => {
+    try {
+      setLoadingThemes(true);
+      const response = await fetch(`${API_BASE_URL}/themes`);
+      if (!response.ok) throw new Error('Failed to fetch themes');
+      const data = await response.json();
+      setThemes(data.themes || []);
+      if (data.themes && data.themes.length > 0) {
+        setFormData(prev => ({ ...prev, themeId: data.themes[0].id }));
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Could not load themes. Using defaults.');
+    } finally {
+      setLoadingThemes(false);
+    }
+  };
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsGenerating(true);
+    setDownloadLink(null);
+    setError(null);
+
+    // Parse combined format/dimensions field
+    const [format, dimensions] = formData.formatDimensions.split('|');
+
+    const payload = {
+      format,
+      dimensions,
+      textMode: formData.textMode,
+      inputText: formData.inputText,
+      numCards: parseInt(formData.numCards),
+      additionalInstructions: formData.additionalInstructions,
+      amount: formData.amount,
+      tone: formData.tone,
+      audience: formData.audience,
+      language: formData.language,
+      themeId: formData.themeId,
+      exportAs: formData.exportAs
+    };
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Generation failed');
+      }
+
+      const data = await response.json();
+      setDownloadLink(data.downloadUrl);
+
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'An error occurred during generation.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-8">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-extrabold text-gray-900">AI Generator with Gamma</h1>
+          <p className="mt-2 text-sm text-gray-600">Create presentations and documents instantly</p>
+        </div>
+
+        {error && (
+          <div className="mb-4 bg-red-50 border-l-4 border-red-400 p-4">
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Format & Dimensions */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Format & Proportions</label>
+              <select name="formatDimensions" value={formData.formatDimensions} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                <option value="presentation|16x9">Presentation 16:9</option>
+                <option value="presentation|4x3">Presentation 4:3</option>
+                <option value="document|a4">Document A4</option>
+              </select>
+            </div>
+
+            {/* Text Mode */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Text Mode</label>
+              <select name="textMode" value={formData.textMode} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                <option value="generate">Generate from scratch</option>
+                <option value="condense">Condense ready text</option>
+                <option value="preserve">Preserve text as is</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Input Text */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Main Prompt / Text</label>
+            <textarea required name="inputText" rows={4} value={formData.inputText} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" placeholder="Enter your prompt or full text here..."></textarea>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Number of Cards */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Number of Slides/Cards (1-60)</label>
+              <input type="number" name="numCards" min="1" max="60" required value={formData.numCards} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" />
+            </div>
+
+             {/* Language */}
+             <div>
+              <label className="block text-sm font-medium text-gray-700">Language</label>
+              <select name="language" value={formData.language} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                <option value="ru">Russian (ru)</option>
+                <option value="en">English (en)</option>
+                <option value="es">Spanish (es)</option>
+                <option value="fr">French (fr)</option>
+                <option value="de">German (de)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Additional Instructions */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Additional Instructions (max 2000 chars)</label>
+            <textarea name="additionalInstructions" maxLength={2000} rows={2} value={formData.additionalInstructions} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" placeholder="Any specific wishes for structure?"></textarea>
+          </div>
+
+          {/* Text Volume Amount */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Text Volume</label>
+            <div className="flex space-x-4">
+              {['brief', 'medium', 'detailed', 'extensive'].map(val => (
+                <label key={val} className="inline-flex items-center">
+                  <input type="radio" name="amount" value={val} checked={formData.amount === val} onChange={handleChange} className="form-radio text-indigo-600" />
+                  <span className="ml-2 text-sm text-gray-700 capitalize">{val}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Tone */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Tone</label>
+              <input type="text" name="tone" value={formData.tone} onChange={handleChange} placeholder="e.g., Professional, Playful" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" />
+            </div>
+
+            {/* Audience */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Audience</label>
+              <input type="text" name="audience" value={formData.audience} onChange={handleChange} placeholder="e.g., Students, Investors" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Theme */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Theme</label>
+              <select name="themeId" value={formData.themeId} onChange={handleChange} disabled={loadingThemes} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border disabled:bg-gray-100">
+                {loadingThemes ? (
+                  <option>Loading themes...</option>
+                ) : (
+                  themes.map(t => (
+                    <option key={t.id} value={t.id}>{t.name || t.id}</option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            {/* Export Format */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Export Format</label>
+              <div className="flex space-x-4">
+                <label className="inline-flex items-center">
+                  <input type="radio" name="exportAs" value="pdf" checked={formData.exportAs === 'pdf'} onChange={handleChange} className="form-radio text-indigo-600" />
+                  <span className="ml-2 text-sm text-gray-700">PDF</span>
+                </label>
+                <label className="inline-flex items-center">
+                  <input type="radio" name="exportAs" value="pptx" checked={formData.exportAs === 'pptx'} onChange={handleChange} className="form-radio text-indigo-600" />
+                  <span className="ml-2 text-sm text-gray-700">PowerPoint (PPTX)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="pt-4 border-t border-gray-200">
+            {downloadLink ? (
+              <div className="flex flex-col items-center">
+                <div className="text-green-600 mb-4 font-medium text-lg">Generation Complete!</div>
+                <a href={downloadLink} target="_blank" rel="noopener noreferrer" className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
+                  Download {formData.exportAs.toUpperCase()}
+                </a>
+                <button type="button" onClick={() => setDownloadLink(null)} className="mt-4 text-sm text-indigo-600 hover:text-indigo-500">
+                  Generate another one
+                </button>
+              </div>
+            ) : (
+              <button type="submit" disabled={isGenerating} className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white transition-colors ${isGenerating ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'}`}>
+                {isGenerating ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Generating... This might take a while
+                  </>
+                ) : (
+                  'Generate'
+                )}
+              </button>
+            )}
+          </div>
+
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export default App;
