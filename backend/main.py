@@ -29,7 +29,7 @@ MOCK_MODE = os.getenv("MOCK_MODE", "false").lower() == "true"
 
 def get_headers():
     return {
-        "Authorization": f"Bearer {GAMMA_API_KEY}",
+        "X-Api-Key": GAMMA_API_KEY,
         "Content-Type": "application/json"
     }
 
@@ -171,6 +171,8 @@ async def generate_document(req: GenerateRequest):
         except httpx.HTTPError as e:
             error_detail = str(e)
             if response is not None:
+                if response.status_code == 401:
+                    raise HTTPException(status_code=401, detail="Недействительный или просроченный API-ключ Gamma")
                 try:
                     error_detail = response.json()
                 except:
