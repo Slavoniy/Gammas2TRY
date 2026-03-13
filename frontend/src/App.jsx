@@ -126,6 +126,7 @@ function App() {
                 <option value="presentation|16x9">Презентация 16:9</option>
                 <option value="presentation|4x3">Презентация 4:3</option>
                 <option value="document|a4">Документ A4</option>
+                <option value="webpage|a4">Веб-сайт</option>
               </select>
             </div>
 

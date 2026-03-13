@@ -35,7 +35,7 @@ def get_headers():
 
 class GenerateRequest(BaseModel):
     # Mapping to Gamma API parameters
-    format: str # 'presentation' or 'document'
+    format: str # 'presentation', 'document', or 'webpage'
     dimensions: str # '16x9', '4x3', 'a4'
     textMode: str # 'generate', 'condense', 'preserve'
     inputText: str
@@ -126,9 +126,6 @@ async def generate_document(req: GenerateRequest):
         "textMode": req.textMode,
         "inputText": req.inputText,
         "numCards": req.numCards,
-        "cardOptions": {
-            "dimensions": req.dimensions
-        },
         "textOptions": {
             "amount": req.amount,
             "language": req.language
@@ -138,6 +135,12 @@ async def generate_document(req: GenerateRequest):
             "model": "flux-2-klein" # Hardcoded cheapest model
         }
     }
+
+    # Conditionally add cardOptions (not supported for webpage format)
+    if req.format != "webpage":
+        payload["cardOptions"] = {
+            "dimensions": req.dimensions
+        }
 
     # Optional fields
     if req.additionalInstructions:
@@ -170,14 +173,28 @@ async def generate_document(req: GenerateRequest):
 
         except httpx.HTTPError as e:
             error_detail = str(e)
+            x_request_id = "N/A"
+
             if response is not None:
+                x_request_id = response.headers.get("x-request-id", "N/A")
+
                 if response.status_code == 401:
                     raise HTTPException(status_code=401, detail="Недействительный или просроченный API-ключ Gamma")
+
                 try:
-                    error_detail = response.json()
-                except:
-                    pass
-            raise HTTPException(status_code=500, detail=f"Gamma API Error: {error_detail}")
+                    # Attempt to parse the raw text response or JSON
+                    raw_text = response.text
+                    print(f"Gamma API Error Response (x-request-id: {x_request_id}): {raw_text}")
+                    try:
+                        error_detail = response.json()
+                    except ValueError:
+                        error_detail = raw_text
+                except Exception as ex:
+                    print(f"Failed to read error response: {ex}")
+            else:
+                 print(f"Gamma API Request Failed without response: {e}")
+
+            raise HTTPException(status_code=500, detail=f"Gamma API Error: {error_detail} (x-request-id: {x_request_id})")
 
 @app.get("/api/health")
 def health_check():
