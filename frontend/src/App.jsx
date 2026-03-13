@@ -92,14 +92,62 @@ function App() {
       }
 
       const data = await response.json();
-      setDownloadLink(data.downloadUrl);
+      const generationId = data.generationId;
+
+      if (!generationId) {
+        throw new Error('Сервер не вернул ID генерации');
+      }
+
+      // Start polling
+      pollGeneration(generationId, formData.exportAs);
 
     } catch (err) {
       console.error(err);
       setError(err.message || 'Произошла ошибка во время генерации.');
-    } finally {
       setIsGenerating(false);
     }
+  };
+
+  const pollGeneration = (generationId, exportAs) => {
+    const pollInterval = 5000; // 5 seconds
+    const maxAttempts = 60; // 5 minutes max
+    let attempts = 0;
+
+    const checkStatus = async () => {
+      attempts++;
+      try {
+        const response = await fetch(`${API_BASE_URL}/generation/${generationId}?export_as=${exportAs}`);
+        if (!response.ok) {
+           const errorData = await response.json();
+           throw new Error(errorData.detail || 'Ошибка при проверке статуса');
+        }
+
+        const data = await response.json();
+
+        if (data.status === 'completed' && data.downloadUrl) {
+          setDownloadLink(data.downloadUrl);
+          setIsGenerating(false);
+          return;
+        } else if (data.status === 'failed' || data.status === 'error' || data.status === 'cancelled') {
+          throw new Error(`Генерация завершилась со статусом: ${data.status}`);
+        }
+
+        if (attempts >= maxAttempts) {
+          throw new Error('Превышено время ожидания генерации');
+        }
+
+        // Continue polling
+        setTimeout(checkStatus, pollInterval);
+
+      } catch (err) {
+        console.error(err);
+        setError(err.message || 'Ошибка при проверке статуса генерации.');
+        setIsGenerating(false);
+      }
+    };
+
+    // Start first check
+    setTimeout(checkStatus, pollInterval);
   };
 
   return (
