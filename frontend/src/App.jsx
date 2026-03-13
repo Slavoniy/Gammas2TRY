@@ -265,9 +265,22 @@ function App() {
                 {loadingThemes ? (
                   <option>Загрузка тем...</option>
                 ) : (
-                  themes.map(t => (
-                    <option key={t.id} value={t.id}>{t.name || t.id}</option>
-                  ))
+                  <>
+                    {themes.some(t => t.type === 'custom') && (
+                      <optgroup label="Ваши темы (Custom)">
+                        {themes.filter(t => t.type === 'custom').map(t => (
+                          <option key={t.id} value={t.id}>{t.name || t.id}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {themes.some(t => t.type === 'standard' || !t.type) && (
+                      <optgroup label="Стандартные темы (Standard)">
+                        {themes.filter(t => t.type === 'standard' || !t.type).map(t => (
+                          <option key={t.id} value={t.id}>{t.name || t.id}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </>
                 )}
               </select>
             </div>
