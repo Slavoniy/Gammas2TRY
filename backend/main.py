@@ -53,27 +53,34 @@ async def get_themes():
     if MOCK_MODE:
         return {
             "themes": [
-                {"id": "theme1", "name": "Dark Elegance"},
-                {"id": "theme2", "name": "Light Corporate"},
-                {"id": "theme3", "name": "Playful Creative"}
+                {"id": "theme1", "name": "Dark Elegance", "type": "standard"},
+                {"id": "theme2", "name": "Light Corporate", "type": "standard"},
+                {"id": "theme3", "name": "Playful Creative", "type": "custom"}
             ]
         }
 
     response = None
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(f"{GAMMA_BASE_URL}/themes", headers=get_headers())
+            response = await client.get(f"{GAMMA_BASE_URL}/themes?limit=50", headers=get_headers())
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+
+            # The API might return {"data": [...]} or directly [...]
+            themes_list = data.get("data", []) if isinstance(data, dict) and "data" in data else data
+            if not isinstance(themes_list, list):
+                themes_list = []
+
+            return {"themes": themes_list}
         except httpx.HTTPError as e:
             if response and response.status_code == 401:
                 # Return mock data if token is invalid, to not block the frontend entirely during testing
                 print(f"Failed to fetch themes from Gamma API: {e}")
                 return {
                     "themes": [
-                        {"id": "theme1", "name": "Dark Elegance (Mock)"},
-                        {"id": "theme2", "name": "Light Corporate (Mock)"},
-                        {"id": "theme3", "name": "Playful Creative (Mock)"}
+                        {"id": "theme1", "name": "Dark Elegance (Mock)", "type": "standard"},
+                        {"id": "theme2", "name": "Light Corporate (Mock)", "type": "standard"},
+                        {"id": "theme3", "name": "Playful Creative (Mock)", "type": "custom"}
                     ]
                 }
             raise HTTPException(status_code=500, detail=f"Error fetching themes: {str(e)}")
