@@ -78,48 +78,57 @@ async def get_themes():
                 }
             raise HTTPException(status_code=500, detail=f"Error fetching themes: {str(e)}")
 
-async def poll_generation(generation_id: str, export_as: str):
-    """
-    Polls the generation status every 5 seconds until completed.
-    Returns ONLY the download link for the requested format.
-    """
-    max_retries = 100 # Adjust as needed
+@app.get("/api/generation/{generation_id}")
+async def get_generation(generation_id: str, export_as: str = "pdf"):
+    if MOCK_MODE:
+        import random
+        # Simulate status endpoint
+        if random.random() < 0.3:
+             return {"status": "completed", "downloadUrl": f"https://mock-download.example.com/mock_file.{export_as}"}
+        return {"status": "in_progress"}
 
     async with httpx.AsyncClient() as client:
-        for _ in range(max_retries):
-            try:
-                response = await client.get(f"{GAMMA_BASE_URL}/generations/{generation_id}", headers=get_headers())
-                response.raise_for_status()
-                data = response.json()
+        try:
+            response = await client.get(f"{GAMMA_BASE_URL}/generations/{generation_id}", headers=get_headers())
+            response.raise_for_status()
+            data = response.json()
 
-                status = data.get("status")
-                if status == "completed":
-                    export_links = data.get("exportLinks", {})
-                    # Critical: Extract ONLY the requested format link
-                    if export_as == "pdf" and "pdf" in export_links:
-                        return {"downloadUrl": export_links["pdf"]}
-                    elif export_as == "pptx" and "pptx" in export_links:
-                        return {"downloadUrl": export_links["pptx"]}
-                    else:
-                        raise HTTPException(status_code=500, detail="Requested export format not found in completed generation.")
-                elif status in ["failed", "cancelled", "error"]:
-                    raise HTTPException(status_code=500, detail=f"Generation failed with status: {status}")
+            status = data.get("status")
+            if status == "completed":
+                export_links = data.get("exportLinks", {})
+                # Critical: Extract ONLY the requested format link
+                if export_as == "pdf" and "pdf" in export_links:
+                    return {"status": "completed", "downloadUrl": export_links["pdf"]}
+                elif export_as == "pptx" and "pptx" in export_links:
+                    return {"status": "completed", "downloadUrl": export_links["pptx"]}
+                else:
+                    raise HTTPException(status_code=500, detail="Requested export format not found in completed generation.")
+            elif status in ["failed", "cancelled", "error"]:
+                raise HTTPException(status_code=500, detail=f"Generation failed with status: {status}")
 
-                # Status is pending/in-progress, wait and poll again
-                await asyncio.sleep(5)
+            # Status is pending/in-progress
+            return {"status": status}
 
-            except httpx.HTTPError as e:
-                 raise HTTPException(status_code=500, detail=f"Error polling generation: {str(e)}")
+        except httpx.HTTPError as e:
+            error_detail = str(e)
+            x_request_id = "N/A"
+            if response is not None:
+                x_request_id = response.headers.get("x-request-id", "N/A")
+                try:
+                    error_detail = response.json()
+                except ValueError:
+                    error_detail = response.text
+            raise HTTPException(status_code=500, detail=f"Error checking generation status: {error_detail} (x-request-id: {x_request_id})")
 
-        raise HTTPException(status_code=504, detail="Generation polling timed out.")
 
 
 @app.post("/api/generate")
 async def generate_document(req: GenerateRequest):
     if MOCK_MODE:
+        import uuid
         # Simulate delay
-        await asyncio.sleep(2)
-        return {"downloadUrl": f"https://mock-download.example.com/mock_file.{req.exportAs}"}
+        await asyncio.sleep(1)
+        return {"generationId": str(uuid.uuid4())}
 
     payload = {
         "format": req.format,
@@ -163,13 +172,13 @@ async def generate_document(req: GenerateRequest):
             )
             response.raise_for_status()
             data = response.json()
-            generation_id = data.get("id")
+            generation_id = data.get("generationId", data.get("id"))
 
             if not generation_id:
                 raise HTTPException(status_code=500, detail="No generation ID returned from Gamma API.")
 
-            # Step 2: Poll for completion and return ONLY the download URL
-            return await poll_generation(generation_id, req.exportAs)
+            # Step 2: Return generation ID immediately for frontend polling
+            return {"generationId": generation_id}
 
         except httpx.HTTPError as e:
             error_detail = str(e)
@@ -195,6 +204,7 @@ async def generate_document(req: GenerateRequest):
                  print(f"Gamma API Request Failed without response: {e}")
 
             raise HTTPException(status_code=500, detail=f"Gamma API Error: {error_detail} (x-request-id: {x_request_id})")
+
 
 @app.get("/api/health")
 def health_check():
