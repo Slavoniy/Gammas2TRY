@@ -95,14 +95,15 @@ async def get_generation(generation_id: str):
 
             status = data.get("status")
             if status == "completed":
-                export_links = data.get("exportLinks", {})
-                # Extract whatever format link is available
-                if "pdf" in export_links:
-                    return {"status": "completed", "downloadUrl": export_links["pdf"]}
-                elif "pptx" in export_links:
-                    return {"status": "completed", "downloadUrl": export_links["pptx"]}
-                else:
-                    raise HTTPException(status_code=500, detail="Requested export format not found in completed generation.")
+                # Safely extract export URL (it could be in exportUrl, export_url, or exportLinks)
+                download_url = data.get("exportUrl") or data.get("export_url")
+
+                if not download_url:
+                    export_links = data.get("exportLinks", {})
+                    download_url = export_links.get("pdf") or export_links.get("pptx")
+
+                # Prevent 500 error even if downloadUrl is None
+                return {"status": "completed", "downloadUrl": download_url}
             elif status in ["failed", "cancelled", "error"]:
                 raise HTTPException(status_code=500, detail=f"Generation failed with status: {status}")
 
@@ -130,9 +131,10 @@ async def generate_document(req: GenerateRequest):
         await asyncio.sleep(1)
         return {"generationId": str(uuid.uuid4())}
 
+    # Ensure exportAs parameter is strictly passed to Gamma API as requested
     payload = {
         "format": req.format,
-        "exportAs": req.exportAs,
+        "exportAs": req.exportAs, # This must be exactly "exportAs"
         "textMode": req.textMode,
         "inputText": req.inputText,
         "numCards": req.numCards,

@@ -124,8 +124,12 @@ function App() {
 
         const data = await response.json();
 
-        if (data.status === 'completed' && data.downloadUrl) {
-          setDownloadLink(data.downloadUrl);
+        if (data.status === 'completed') {
+          if (data.downloadUrl) {
+            setDownloadLink(data.downloadUrl);
+          } else {
+            setError('Презентация создана, но ссылка на скачивание не найдена в ответе API Gamma.');
+          }
           setIsGenerating(false);
           return;
         } else if (data.status === 'failed' || data.status === 'error' || data.status === 'cancelled') {
