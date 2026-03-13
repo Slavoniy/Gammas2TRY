@@ -79,12 +79,12 @@ async def get_themes():
             raise HTTPException(status_code=500, detail=f"Error fetching themes: {str(e)}")
 
 @app.get("/api/generation/{generation_id}")
-async def get_generation(generation_id: str, export_as: str = "pdf"):
+async def get_generation(generation_id: str):
     if MOCK_MODE:
         import random
         # Simulate status endpoint
         if random.random() < 0.3:
-             return {"status": "completed", "downloadUrl": f"https://mock-download.example.com/mock_file.{export_as}"}
+             return {"status": "completed", "downloadUrl": f"https://mock-download.example.com/mock_file.pdf"}
         return {"status": "in_progress"}
 
     async with httpx.AsyncClient() as client:
@@ -96,10 +96,10 @@ async def get_generation(generation_id: str, export_as: str = "pdf"):
             status = data.get("status")
             if status == "completed":
                 export_links = data.get("exportLinks", {})
-                # Critical: Extract ONLY the requested format link
-                if export_as == "pdf" and "pdf" in export_links:
+                # Extract whatever format link is available
+                if "pdf" in export_links:
                     return {"status": "completed", "downloadUrl": export_links["pdf"]}
-                elif export_as == "pptx" and "pptx" in export_links:
+                elif "pptx" in export_links:
                     return {"status": "completed", "downloadUrl": export_links["pptx"]}
                 else:
                     raise HTTPException(status_code=500, detail="Requested export format not found in completed generation.")
@@ -132,6 +132,7 @@ async def generate_document(req: GenerateRequest):
 
     payload = {
         "format": req.format,
+        "exportAs": req.exportAs,
         "textMode": req.textMode,
         "inputText": req.inputText,
         "numCards": req.numCards,

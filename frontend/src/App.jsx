@@ -116,7 +116,7 @@ function App() {
     const checkStatus = async () => {
       attempts++;
       try {
-        const response = await fetch(`${API_BASE_URL}/generation/${generationId}?export_as=${exportAs}`);
+        const response = await fetch(`${API_BASE_URL}/generation/${generationId}`);
         if (!response.ok) {
            const errorData = await response.json();
            throw new Error(errorData.detail || 'Ошибка при проверке статуса');
