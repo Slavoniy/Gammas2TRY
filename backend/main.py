@@ -29,7 +29,7 @@ MOCK_MODE = os.getenv("MOCK_MODE", "false").lower() == "true"
 
 def get_headers():
     return {
-        "Authorization": f"Bearer {GAMMA_API_KEY}",
+        "X-API-KEY": GAMMA_API_KEY,
         "Content-Type": "application/json"
     }
 
