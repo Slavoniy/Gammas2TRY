@@ -161,7 +161,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-8">
+      <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-md p-8">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-extrabold text-gray-900">ИИ Генератор с Gamma</h1>
           <p className="mt-2 text-sm text-gray-600">Мгновенное создание презентаций и документов</p>
