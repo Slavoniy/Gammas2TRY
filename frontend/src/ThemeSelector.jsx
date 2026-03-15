@@ -65,7 +65,7 @@ function ThemeSelector({ themes, selectedThemeId, onSelectTheme, loading }) {
 
   const renderDropdownItem = (theme) => {
     const isSelected = selectedThemeId === theme.id;
-    const imageUrl = `${S3_BASE_URL}${theme.id}.jpg`;
+    const imageUrl = `${S3_BASE_URL}${theme.id}.png`;
 
     return (
       <li
@@ -100,7 +100,7 @@ function ThemeSelector({ themes, selectedThemeId, onSelectTheme, loading }) {
         <span className="flex items-center">
           {selectedTheme ? (
             <>
-              <ImageWithFallback src={`${S3_BASE_URL}${selectedTheme.id}.jpg`} alt={selectedTheme.name || selectedTheme.id} className="w-10 h-6 rounded shrink-0 shadow-sm border border-gray-200 mr-3" />
+              <ImageWithFallback src={`${S3_BASE_URL}${selectedTheme.id}.png`} alt={selectedTheme.name || selectedTheme.id} className="w-10 h-6 rounded shrink-0 shadow-sm border border-gray-200 mr-3" />
               <span className="block truncate font-medium text-gray-900">{selectedTheme.name || selectedTheme.id}</span>
             </>
           ) : (
