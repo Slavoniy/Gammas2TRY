@@ -161,7 +161,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-8">
+      <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-8">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-extrabold text-gray-900">ИИ Генератор с Gamma</h1>
           <p className="mt-2 text-sm text-gray-600">Мгновенное создание презентаций и документов</p>
@@ -262,40 +262,39 @@ function App() {
             </div>
           </div>
 
-          {/* Export Format */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Формат экспорта</label>
-            <div className="flex space-x-4">
-              <label className="inline-flex items-center">
-                <input type="radio" name="exportAs" value="pdf" checked={formData.exportAs === 'pdf'} onChange={handleChange} className="form-radio text-indigo-600" />
-                <span className="ml-2 text-sm text-gray-700">PDF</span>
-              </label>
-              <label className="inline-flex items-center">
-                <input type="radio" name="exportAs" value="pptx" checked={formData.exportAs === 'pptx'} onChange={handleChange} className="form-radio text-indigo-600" />
-                <span className="ml-2 text-sm text-gray-700">PowerPoint (PPTX)</span>
-              </label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+            {/* Theme Selector */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Оформление (Тема)</label>
+              <ThemeSelector
+                themes={themes}
+                selectedThemeId={formData.themeId}
+                onSelectTheme={handleThemeSelect}
+                loading={loadingThemes}
+              />
+              {/* Скрытый input для нативной валидации формы */}
+              <input type="hidden" name="themeId" value={formData.themeId} required />
+            </div>
+
+            {/* Export Format */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Формат экспорта</label>
+              <div className="flex space-x-4">
+                <label className="inline-flex items-center">
+                  <input type="radio" name="exportAs" value="pdf" checked={formData.exportAs === 'pdf'} onChange={handleChange} className="form-radio text-indigo-600" />
+                  <span className="ml-2 text-sm text-gray-700">PDF</span>
+                </label>
+                <label className="inline-flex items-center">
+                  <input type="radio" name="exportAs" value="pptx" checked={formData.exportAs === 'pptx'} onChange={handleChange} className="form-radio text-indigo-600" />
+                  <span className="ml-2 text-sm text-gray-700">PowerPoint (PPTX)</span>
+                </label>
+              </div>
             </div>
           </div>
 
-          {/* Theme Selector */}
-          <div className="border-t border-gray-200 pt-6">
-            <div className="mb-4">
-              <h2 className="text-lg font-medium text-gray-900">Оформление (Тема)</h2>
-              <p className="text-sm text-gray-500">Выберите подходящий визуальный стиль для вашей генерации.</p>
-            </div>
-
-            <ThemeSelector
-              themes={themes}
-              selectedThemeId={formData.themeId}
-              onSelectTheme={handleThemeSelect}
-              loading={loadingThemes}
-            />
-            {/* Скрытый input для нативной валидации формы */}
-            <input type="hidden" name="themeId" value={formData.themeId} required />
-          </div>
 
           {/* Actions */}
-          <div className="pt-8 border-t border-gray-200">
+          <div className="pt-4 border-t border-gray-200 mt-8 relative z-0">
             {downloadLink ? (
               <div className="flex flex-col items-center">
                 <div className="text-green-600 mb-4 font-medium text-lg">Генерация завершена!</div>
