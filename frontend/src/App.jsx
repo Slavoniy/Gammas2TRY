@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import ThemeSelector from './ThemeSelector';
 
 function App() {
   const [themes, setThemes] = useState([]);
@@ -53,6 +54,10 @@ function App() {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+  };
+
+  const handleThemeSelect = (themeId) => {
+    setFormData(prev => ({ ...prev, themeId }));
   };
 
   const handleSubmit = async (e) => {
@@ -257,32 +262,18 @@ function App() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Theme */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+            {/* Theme Selector */}
             <div>
-              <label className="block text-sm font-medium text-gray-700">Тема (Оформление)</label>
-              <select name="themeId" value={formData.themeId} onChange={handleChange} disabled={loadingThemes} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border disabled:bg-gray-100">
-                {loadingThemes ? (
-                  <option>Загрузка тем...</option>
-                ) : (
-                  <>
-                    {themes.some(t => t.type === 'custom') && (
-                      <optgroup label="Ваши темы (Custom)">
-                        {themes.filter(t => t.type === 'custom').map(t => (
-                          <option key={t.id} value={t.id}>{t.name || t.id}</option>
-                        ))}
-                      </optgroup>
-                    )}
-                    {themes.some(t => t.type === 'standard' || !t.type) && (
-                      <optgroup label="Стандартные темы (Standard)">
-                        {themes.filter(t => t.type === 'standard' || !t.type).map(t => (
-                          <option key={t.id} value={t.id}>{t.name || t.id}</option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </>
-                )}
-              </select>
+              <label className="block text-sm font-medium text-gray-700">Оформление (Тема)</label>
+              <ThemeSelector
+                themes={themes}
+                selectedThemeId={formData.themeId}
+                onSelectTheme={handleThemeSelect}
+                loading={loadingThemes}
+              />
+              {/* Скрытый input для нативной валидации формы */}
+              <input type="hidden" name="themeId" value={formData.themeId} required />
             </div>
 
             {/* Export Format */}
@@ -301,8 +292,9 @@ function App() {
             </div>
           </div>
 
+
           {/* Actions */}
-          <div className="pt-4 border-t border-gray-200">
+          <div className="pt-4 border-t border-gray-200 mt-8 relative z-0">
             {downloadLink ? (
               <div className="flex flex-col items-center">
                 <div className="text-green-600 mb-4 font-medium text-lg">Генерация завершена!</div>
@@ -314,7 +306,7 @@ function App() {
                 </button>
               </div>
             ) : (
-              <button type="submit" disabled={isGenerating} className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white transition-colors ${isGenerating ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'}`}>
+              <button type="submit" disabled={isGenerating || !formData.themeId} className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white transition-colors ${(isGenerating || !formData.themeId) ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'}`}>
                 {isGenerating ? (
                   <>
                     <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
