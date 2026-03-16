@@ -76,7 +76,7 @@ function ThemeSelector({ themes, selectedThemeId, onSelectTheme, loading }) {
         }}
         className={`cursor-pointer flex flex-col items-center overflow-hidden hover:bg-indigo-50 transition-colors border-b border-gray-100 last:border-b-0 ${isSelected ? 'bg-indigo-100 text-indigo-900' : 'text-gray-700'}`}
       >
-        <ImageWithFallback src={imageUrl} alt={theme.name || theme.id} className="w-full h-[225px] object-cover shrink-0" />
+        <ImageWithFallback src={imageUrl} alt={theme.name || theme.id} className="w-full aspect-video object-cover shrink-0" />
         <div className="flex items-center justify-center w-full p-3 relative">
           <span className="font-medium text-base text-center truncate">{theme.name || theme.id}</span>
           {isSelected && (
@@ -92,17 +92,17 @@ function ThemeSelector({ themes, selectedThemeId, onSelectTheme, loading }) {
   };
 
   return (
-    <div className="relative mt-1 inline-block w-[400px]" ref={dropdownRef}>
+    <div className="relative mt-1 inline-block w-full" ref={dropdownRef}>
       {/* Dropdown Button */}
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="relative w-[400px] bg-white border border-gray-300 rounded-md shadow-sm text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition-colors hover:border-indigo-300 flex flex-col p-0 overflow-hidden"
+        className="relative w-full bg-white border border-gray-300 rounded-md shadow-sm text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition-colors hover:border-indigo-300 flex flex-col p-0 overflow-hidden"
       >
         <span className="flex flex-col items-center w-full">
           {selectedTheme ? (
             <>
-              <ImageWithFallback src={`${S3_BASE_URL}${selectedTheme.id}.png`} alt={selectedTheme.name || selectedTheme.id} className="w-full h-[225px] object-cover shrink-0" />
+              <ImageWithFallback src={`${S3_BASE_URL}${selectedTheme.id}.png`} alt={selectedTheme.name || selectedTheme.id} className="w-full aspect-video object-cover shrink-0" />
               <div className="w-full p-3 relative flex items-center justify-center">
                 <span className="block truncate font-medium text-base text-gray-900 text-center">{selectedTheme.name || selectedTheme.id}</span>
                 <span className="absolute right-3 flex items-center pointer-events-none">
@@ -127,7 +127,7 @@ function ThemeSelector({ themes, selectedThemeId, onSelectTheme, loading }) {
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-[400px] bg-white shadow-2xl rounded-md py-2 text-base ring-1 ring-black ring-opacity-10 max-h-[300px] overflow-y-auto focus:outline-none left-0">
+        <div className="absolute z-50 mt-1 w-full bg-white shadow-2xl rounded-md py-2 text-base ring-1 ring-black ring-opacity-10 max-h-[300px] overflow-y-auto focus:outline-none left-0">
           <ul role="listbox">
             {customThemes.length > 0 && (
               <>
