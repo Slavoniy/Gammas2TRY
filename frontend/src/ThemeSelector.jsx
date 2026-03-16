@@ -127,7 +127,7 @@ function ThemeSelector({ themes, selectedThemeId, onSelectTheme, loading }) {
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-full bg-white shadow-2xl rounded-md py-2 text-base ring-1 ring-black ring-opacity-10 max-h-[300px] overflow-y-auto focus:outline-none left-0">
+        <div className="absolute z-50 mt-1 w-full bg-white shadow-2xl rounded-md py-2 text-base ring-1 ring-black ring-opacity-10 max-h-[60vh] overflow-y-auto focus:outline-none left-0">
           <ul role="listbox">
             {customThemes.length > 0 && (
               <>
