@@ -1,9 +1,14 @@
 # Build frontend
 FROM node:18-alpine AS build-frontend
 WORKDIR /app/frontend
+
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ ./
+
+ARG VITE_S3_THEMES_BASE_URL=https://s3.timeweb.cloud/my-temp-bucket/themes/
+ENV VITE_S3_THEMES_BASE_URL=$VITE_S3_THEMES_BASE_URL
+
 RUN npm run build
 
 # Build backend and serve
