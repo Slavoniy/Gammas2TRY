@@ -262,7 +262,24 @@ function App() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+          <div className="space-y-6 relative z-10">
+            {/* Export Format */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Формат экспорта</label>
+                <div className="flex space-x-4">
+                  <label className="inline-flex items-center">
+                    <input type="radio" name="exportAs" value="pdf" checked={formData.exportAs === 'pdf'} onChange={handleChange} className="form-radio text-indigo-600" />
+                    <span className="ml-2 text-sm text-gray-700">PDF</span>
+                  </label>
+                  <label className="inline-flex items-center">
+                    <input type="radio" name="exportAs" value="pptx" checked={formData.exportAs === 'pptx'} onChange={handleChange} className="form-radio text-indigo-600" />
+                    <span className="ml-2 text-sm text-gray-700">PowerPoint (PPTX)</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
             {/* Theme Selector */}
             <div>
               <label className="block text-sm font-medium text-gray-700">Оформление (Тема)</label>
@@ -274,21 +291,6 @@ function App() {
               />
               {/* Скрытый input для нативной валидации формы */}
               <input type="hidden" name="themeId" value={formData.themeId} required />
-            </div>
-
-            {/* Export Format */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Формат экспорта</label>
-              <div className="flex space-x-4">
-                <label className="inline-flex items-center">
-                  <input type="radio" name="exportAs" value="pdf" checked={formData.exportAs === 'pdf'} onChange={handleChange} className="form-radio text-indigo-600" />
-                  <span className="ml-2 text-sm text-gray-700">PDF</span>
-                </label>
-                <label className="inline-flex items-center">
-                  <input type="radio" name="exportAs" value="pptx" checked={formData.exportAs === 'pptx'} onChange={handleChange} className="form-radio text-indigo-600" />
-                  <span className="ml-2 text-sm text-gray-700">PowerPoint (PPTX)</span>
-                </label>
-              </div>
             </div>
           </div>
 
