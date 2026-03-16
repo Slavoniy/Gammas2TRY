@@ -36,9 +36,10 @@ function App() {
       const response = await fetch(`${API_BASE_URL}/themes`);
       if (!response.ok) throw new Error('Не удалось загрузить темы');
       const data = await response.json();
-      setThemes(data.themes || []);
-      if (data.themes && data.themes.length > 0) {
-        setFormData(prev => ({ ...prev, themeId: data.themes[0].id }));
+      const standardThemes = (data.themes || []).filter(t => t.type === 'standard');
+      setThemes(standardThemes);
+      if (standardThemes.length > 0) {
+        setFormData(prev => ({ ...prev, themeId: standardThemes[0].id }));
       }
     } catch (err) {
       console.error(err);
@@ -183,7 +184,6 @@ function App() {
                 <option value="presentation|16x9">Презентация 16:9</option>
                 <option value="presentation|4x3">Презентация 4:3</option>
                 <option value="document|a4">Документ A4</option>
-                <option value="webpage|a4">Веб-сайт</option>
               </select>
             </div>
 

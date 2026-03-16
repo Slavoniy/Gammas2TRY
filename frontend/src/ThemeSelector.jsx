@@ -60,8 +60,6 @@ function ThemeSelector({ themes, selectedThemeId, onSelectTheme, loading }) {
   }
 
   const selectedTheme = themes.find(t => t.id === selectedThemeId) || themes[0];
-  const customThemes = themes.filter(t => t.type === 'custom');
-  const standardThemes = themes.filter(t => t.type === 'standard' || !t.type);
 
   const renderDropdownItem = (theme) => {
     const isSelected = selectedThemeId === theme.id;
@@ -128,20 +126,8 @@ function ThemeSelector({ themes, selectedThemeId, onSelectTheme, loading }) {
       {/* Dropdown Menu */}
       {isOpen && (
         <div className="absolute z-50 mt-1 w-full bg-white shadow-2xl rounded-md py-2 text-base ring-1 ring-black ring-opacity-10 max-h-[60vh] overflow-y-auto focus:outline-none left-0">
-          <ul role="listbox">
-            {customThemes.length > 0 && (
-              <>
-                <li className="px-4 py-2 text-sm font-bold text-gray-500 uppercase tracking-wider bg-gray-100 sticky top-0 z-10 shadow-sm">Ваши темы (Custom)</li>
-                {customThemes.map(renderDropdownItem)}
-              </>
-            )}
-
-            {standardThemes.length > 0 && (
-              <>
-                <li className="px-4 py-2 text-sm font-bold text-gray-500 uppercase tracking-wider bg-gray-100 sticky top-0 z-10 shadow-sm">Стандартные темы (Standard)</li>
-                {standardThemes.map(renderDropdownItem)}
-              </>
-            )}
+                    <ul role="listbox">
+            {themes.map(renderDropdownItem)}
           </ul>
         </div>
       )}
