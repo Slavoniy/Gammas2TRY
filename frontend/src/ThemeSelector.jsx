@@ -22,7 +22,7 @@ const ImageWithFallback = ({ src, alt, className }) => {
     <img
       src={src}
       alt={alt}
-      className={`object-cover ${className}`}
+      className={`${className}`}
       onError={() => setImgError(true)}
     />
   );
@@ -74,13 +74,13 @@ function ThemeSelector({ themes, selectedThemeId, onSelectTheme, loading }) {
           onSelectTheme(theme.id);
           setIsOpen(false);
         }}
-        className={`cursor-pointer flex flex-col items-center p-4 hover:bg-indigo-50 transition-colors border-b border-gray-100 last:border-b-0 ${isSelected ? 'bg-indigo-100 text-indigo-900' : 'text-gray-700'}`}
+        className={`cursor-pointer flex flex-row items-center p-3 hover:bg-indigo-50 transition-colors border-b border-gray-100 last:border-b-0 ${isSelected ? 'bg-indigo-100 text-indigo-900' : 'text-gray-700'}`}
       >
-        <ImageWithFallback src={imageUrl} alt={theme.name || theme.id} className="w-[300px] h-[300px] rounded shadow-md border border-gray-200 mb-3" />
-        <div className="flex items-center justify-between w-[300px]">
-          <span className="font-medium text-lg truncate pr-2">{theme.name || theme.id}</span>
+        <ImageWithFallback src={imageUrl} alt={theme.name || theme.id} className="w-[160px] h-[90px] object-contain rounded shrink-0 shadow-sm border border-gray-200 mr-4" />
+        <div className="flex items-center justify-between w-full overflow-hidden">
+          <span className="font-medium text-base truncate">{theme.name || theme.id}</span>
           {isSelected && (
-            <svg className="h-6 w-6 text-indigo-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <svg className="h-5 w-5 text-indigo-600 shrink-0 ml-2" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
             </svg>
           )}
@@ -90,18 +90,18 @@ function ThemeSelector({ themes, selectedThemeId, onSelectTheme, loading }) {
   };
 
   return (
-    <div className="relative mt-1" ref={dropdownRef}>
+    <div className="relative mt-1 inline-block w-[400px]" ref={dropdownRef}>
       {/* Dropdown Button */}
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="relative w-full bg-white border border-gray-300 rounded-md shadow-sm pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition-colors hover:border-indigo-300 min-h-[44px]"
+        className="relative w-[400px] bg-white border border-gray-300 rounded-md shadow-sm pl-3 pr-10 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition-colors hover:border-indigo-300"
       >
         <span className="flex items-center">
           {selectedTheme ? (
             <>
-              <ImageWithFallback src={`${S3_BASE_URL}${selectedTheme.id}.png`} alt={selectedTheme.name || selectedTheme.id} className="w-10 h-6 rounded shrink-0 shadow-sm border border-gray-200 mr-3" />
-              <span className="block truncate font-medium text-gray-900">{selectedTheme.name || selectedTheme.id}</span>
+              <ImageWithFallback src={`${S3_BASE_URL}${selectedTheme.id}.png`} alt={selectedTheme.name || selectedTheme.id} className="w-[160px] h-[90px] object-contain rounded shrink-0 shadow-sm border border-gray-200 mr-4" />
+              <span className="block truncate font-medium text-base text-gray-900">{selectedTheme.name || selectedTheme.id}</span>
             </>
           ) : (
             <span className="text-gray-500">Выберите тему</span>
@@ -116,7 +116,7 @@ function ThemeSelector({ themes, selectedThemeId, onSelectTheme, loading }) {
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-[350px] sm:w-full bg-white shadow-2xl rounded-md py-2 text-base ring-1 ring-black ring-opacity-10 max-h-[70vh] overflow-y-auto focus:outline-none sm:text-sm left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0">
+        <div className="absolute z-50 mt-1 w-[400px] bg-white shadow-2xl rounded-md py-2 text-base ring-1 ring-black ring-opacity-10 max-h-[300px] overflow-y-auto focus:outline-none left-0">
           <ul role="listbox">
             {customThemes.length > 0 && (
               <>
