@@ -5,6 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - VITE_S3_THEMES_BASE_URL=${VITE_S3_THEMES_BASE_URL:-https://s3.timeweb.cloud/my-temp-bucket/themes/}
     ports:
       - "8000:8000"
     environment:
