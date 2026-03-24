@@ -139,7 +139,9 @@ async def poll_and_notify(generation_id: str, email: str, product_name: str) -> 
                 logger.info(
                     "Generation completed (mock), id=%s, emailing %s", generation_id, email
                 )
-                send_download_email(email, mock_url, product_name)
+                await asyncio.to_thread(
+                    send_download_email, email, mock_url, product_name
+                )
                 return
             continue
 
@@ -163,7 +165,9 @@ async def poll_and_notify(generation_id: str, email: str, product_name: str) -> 
                 logger.info(
                     "Generation completed, id=%s, email sent to %s", generation_id, email
                 )
-                send_download_email(email, download_url or "", product_name)
+                await asyncio.to_thread(
+                    send_download_email, email, download_url or "", product_name
+                )
                 return
             elif status in ("failed", "cancelled", "error"):
                 logger.error(
