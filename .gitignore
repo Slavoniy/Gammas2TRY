@@ -1,8 +1,18 @@
-.DS_Store
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Env
+.env
+*.env
+
+# Logs
 *.log
-backend/__pycache__/
-backend/.env
-backend/.venv/
-frontend/node_modules/
-frontend/dist/
-backend/venv
+
+# OS
+.DS_Store
+Thumbs.db
