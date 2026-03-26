@@ -85,6 +85,18 @@ class GenerateRequest(BaseModel):
 
 
 def send_download_email(email: str, download_url: str, product_name: str) -> None:
+    if not SMTP_USER or not SMTP_PASSWORD or not SMTP_FROM:
+        logger.error(
+            "SMTP не настроен! SMTP_USER=%s, SMTP_FROM=%s, SMTP_PASSWORD=%s",
+            SMTP_USER, SMTP_FROM, "***" if SMTP_PASSWORD else "ПУСТО",
+        )
+        return
+
+    logger.info(
+        "Отправка email: to=%s, from=%s, host=%s:%s",
+        email, SMTP_FROM, SMTP_HOST, SMTP_PORT,
+    )
+
     html_body = f"""
     <html>
     <body style="font-family: Arial, sans-serif; color: #333;">
@@ -111,12 +123,21 @@ def send_download_email(email: str, download_url: str, product_name: str) -> Non
 
     try:
         context = ssl.create_default_context()
+        logger.info("Подключение к SMTP %s:%s...", SMTP_HOST, SMTP_PORT)
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=context) as server:
+            logger.info("SMTP подключён, авторизация...")
             server.login(SMTP_USER, SMTP_PASSWORD)
+            logger.info("Авторизация успешна, отправка на %s...", email)
             server.sendmail(SMTP_FROM, email, msg.as_string())
-        logger.info("Email sent to %s for product '%s'", email, product_name)
-    except Exception:
-        logger.error("Failed to send email to %s", email, exc_info=True)
+        logger.info("Email успешно отправлен на %s", email)
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error("SMTP ошибка авторизации: %s", e)
+    except smtplib.SMTPConnectError as e:
+        logger.error("SMTP ошибка подключения к %s:%s: %s", SMTP_HOST, SMTP_PORT, e)
+    except smtplib.SMTPException as e:
+        logger.error("SMTP ошибка: %s", e)
+    except Exception as e:
+        logger.error("Неизвестная ошибка отправки email: %s", e, exc_info=True)
 
 
 def extract_num_cards_from_options(options: list) -> int:
