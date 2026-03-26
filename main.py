@@ -433,8 +433,8 @@ async def poll_and_notify(generation_id: str, email: str, product_name: str, num
     # Poll Gamma API until completed
     gamma_url = None
     async with httpx.AsyncClient() as client:
-        for attempt in range(1, 61):
-            await asyncio.sleep(5)
+        for attempt in range(1, 11):
+            await asyncio.sleep(60)
             try:
                 response = await client.get(
                     f"{GAMMA_BASE_URL}/generations/{generation_id}",
@@ -451,6 +451,12 @@ async def poll_and_notify(generation_id: str, email: str, product_name: str, num
                         or data.get("exportLinks", {}).get("pptx")
                         or data.get("exportLinks", {}).get("pdf")
                     )
+                    logger.info(
+                        "Генерация завершена id=%s, ждём 30 сек перед скачиванием...",
+                        generation_id,
+                    )
+                    await asyncio.sleep(30)
+                    logger.info("Пауза завершена, скачиваем файл...")
                     break
                 elif status in ("failed", "cancelled", "error"):
                     logger.error("Генерация провалилась: %s", status)
