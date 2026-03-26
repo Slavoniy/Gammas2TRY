@@ -57,7 +57,7 @@ S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "")
 S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "")
 S3_REGION     = os.getenv("S3_REGION", "ru-1")
 
-BACKEND_URL = os.getenv("BACKEND_URL", "https://slavoniy-gammas2try-7fe3.twc1.net")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://api.presentaciya.ru")
 
 DEFAULT_GENERATION_PARAMS = {
     "format": "presentation",
