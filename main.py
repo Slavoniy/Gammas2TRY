@@ -66,6 +66,28 @@ DEFAULT_GENERATION_PARAMS = {
     "imageOptions": {"source": "aiGenerated", "model": "flux-2-klein"},
 }
 
+DIMENSIONS_MAPPING = {
+    # Презентации
+    "презентация 16:9":               {"format": "presentation", "dim": "16x9"},
+    "презентация 4:3":                {"format": "presentation", "dim": "4x3"},
+    # Документ
+    "документ а4":                    {"format": "document",     "dim": "a4"},
+    # Соцсети
+    "пост для соцсетей квадрат 1:1":  {"format": "social",       "dim": "1x1"},
+    "пост для соцсетей истории 9:16": {"format": "social",       "dim": "9x16"},
+    "пост для соцсетей портрет 4:5":  {"format": "social",       "dim": "4x5"},
+    # Технические fallback
+    "16:9":  {"format": "presentation", "dim": "16x9"},
+    "4:3":   {"format": "presentation", "dim": "4x3"},
+    "a4":    {"format": "document",     "dim": "a4"},
+    "а4":    {"format": "document",     "dim": "a4"},
+    "1x1":   {"format": "social",       "dim": "1x1"},
+    "9x16":  {"format": "social",       "dim": "9x16"},
+    "4x5":   {"format": "social",       "dim": "4x5"},
+}
+
+DEFAULT_FORMAT = {"format": "presentation", "dim": "16x9"}
+
 
 def get_headers():
     return {
@@ -790,9 +812,18 @@ async def webhook_tilda(request: Request, background_tasks: BackgroundTasks):
 
         # Map Tilda field values (Russian labels → Gamma API codes)
         # Tilda sends nested keys with underscores: cardOptions_dimensions
-        format_ = map_format(data.get("format", "presentation"))
-        dimensions = map_dimensions(
-            data.get("cardOptions_dimensions") or data.get("cardOptions.dimensions") or "16:9"
+        dimensions_raw = (
+            data.get("dimensions", "")
+            or data.get("cardOptions_dimensions", "")
+            or data.get("cardOptions.dimensions", "")
+            or "презентация 16:9"
+        ).lower().strip()
+        format_map = DIMENSIONS_MAPPING.get(dimensions_raw, DEFAULT_FORMAT)
+        format_    = format_map["format"]
+        dimensions = format_map["dim"]
+        logger.info(
+            "Dimensions raw: '%s' → format=%s, dim=%s",
+            dimensions_raw, format_, dimensions,
         )
         text_mode = map_text_mode(
             data.get("textMode") or data.get("textmode") or "generate"
