@@ -195,6 +195,45 @@ def map_dimensions(value: str) -> str:
     return mapping.get(value.lower().strip(), "16x9")
 
 
+def parse_tilda_payment(body: dict) -> dict:
+    """Parse Tilda's bracket-notation payment fields into a structured dict.
+
+    Tilda sends form-urlencoded data with keys like:
+      payment[products][0][name] = 'Презентация'
+      payment[products][0][externalid] = 'sage'
+      payment[products][0][options][0][variant] = '5 слайдов'
+    """
+    products: dict = {}
+    for key, value in body.items():
+        match = re.match(
+            r'payment\[products\]\[(\d+)\]\[([^\]]+)\](?:\[(\d+)\]\[([^\]]+)\])?',
+            key
+        )
+        if not match:
+            continue
+        prod_idx = int(match.group(1))
+        field = match.group(2)
+        opt_idx = match.group(3)
+        opt_field = match.group(4)
+        if prod_idx not in products:
+            products[prod_idx] = {"options": {}}
+        if opt_idx is not None:
+            opt_idx = int(opt_idx)
+            if opt_idx not in products[prod_idx]["options"]:
+                products[prod_idx]["options"][opt_idx] = {}
+            products[prod_idx]["options"][opt_idx][opt_field] = value
+        else:
+            if field != "options":
+                products[prod_idx][field] = value
+    result = []
+    for idx in sorted(products.keys()):
+        prod = products[idx]
+        prod["options"] = [prod["options"][i] for i in sorted(prod["options"].keys())]
+        result.append(prod)
+    logger.info(f"Parsed payment products: {result}")
+    return {"products": result}
+
+
 async def poll_and_notify(generation_id: str, email: str, product_name: str) -> None:
     for attempt in range(60):
         await asyncio.sleep(5)
@@ -535,54 +574,71 @@ async def webhook_tilda(request: Request, background_tasks: BackgroundTasks):
             return JSONResponse({"status": "forbidden"}, status_code=403)
 
     # Тильда шлёт тестовый ping при добавлении webhook — отвечаем 200
-    if data.get("test") == "test" or (not data.get("email") and not data.get("Email") and not data.get("payment")):
+    has_payment = data.get("payment") or any(k.startswith("payment[") for k in data)
+    if data.get("test") == "test" or (not data.get("email") and not data.get("Email") and not has_payment):
         logger.info("Webhook: получен тестовый запрос от Тильды, отвечаем 200 OK")
         return JSONResponse({"status": "ok", "message": "webhook connected"})
 
-    # 4. Extract fields
-    email = data.get("email", "")
-    products = data.get("payment", {}).get("products", [])
-    if not products:
-        raise HTTPException(status_code=400, detail="No products in payload")
+    try:
+        # 4. Extract fields
+        email = data.get("email") or data.get("Email") or ""
 
-    product = products[0]
-    theme_id = product.get("externalid")
-    product_name = product.get("name", "Презентация")
-    num_cards = extract_num_cards_from_options(product.get("options", []))
+        # Tilda sends payment as bracket-notation keys (form-urlencoded)
+        # Try nested dict first (JSON mode), fall back to bracket parsing
+        raw_payment = data.get("payment")
+        if isinstance(raw_payment, dict):
+            payment = raw_payment
+        else:
+            payment = parse_tilda_payment(data)
 
-    # Map Tilda field values (Russian labels → Gamma API codes)
-    # Tilda sends nested keys with underscores: cardOptions_dimensions
-    format_ = map_format(data.get("format", "presentation"))
-    dimensions = map_dimensions(
-        data.get("cardOptions_dimensions") or data.get("cardOptions.dimensions") or "16:9"
-    )
-    text_mode = map_text_mode(
-        data.get("textMode") or data.get("textmode") or "generate"
-    )
-    language = map_language(
-        data.get("textOptions_language") or data.get("textOptions.language") or "русский"
-    )
-    amount = map_amount(
-        data.get("textOptions_amount") or data.get("textOptions.amount") or "medium"
-    )
-    input_text = data.get("inputText") or data.get("inputtext") or ""
-    additional = data.get("additionalInstructions") or data.get("additionalinstructions") or ""
-    audience = data.get("textOptions_audience") or data.get("textOptions.audience") or ""
-    tone = data.get("textOptions_tone") or data.get("textOptions.tone") or ""
+        products = payment.get("products", [])
+        if not products:
+            logger.warning("No products in payment payload, using defaults")
+            product: dict = {}
+        else:
+            product = products[0]
 
-    logger.info(
-        "Webhook: email=%s themeId=%s numCards=%d format=%s dimensions=%s "
-        "textMode=%s language=%s amount=%s",
-        email, theme_id, num_cards, format_, dimensions, text_mode, language, amount,
-    )
+        theme_id = product.get("externalid")
+        product_name = product.get("name", "Презентация")
+        num_cards = extract_num_cards_from_options(product.get("options", []))
 
-    background_tasks.add_task(
-        generate_and_notify,
-        email, theme_id, product_name, num_cards,
-        format_, dimensions, text_mode, language, amount, input_text, additional, audience, tone,
-    )
+        # Map Tilda field values (Russian labels → Gamma API codes)
+        # Tilda sends nested keys with underscores: cardOptions_dimensions
+        format_ = map_format(data.get("format", "presentation"))
+        dimensions = map_dimensions(
+            data.get("cardOptions_dimensions") or data.get("cardOptions.dimensions") or "16:9"
+        )
+        text_mode = map_text_mode(
+            data.get("textMode") or data.get("textmode") or "generate"
+        )
+        language = map_language(
+            data.get("textOptions_language") or data.get("textOptions.language") or "русский"
+        )
+        amount = map_amount(
+            data.get("textOptions_amount") or data.get("textOptions.amount") or "medium"
+        )
+        input_text = data.get("inputText") or data.get("inputtext") or ""
+        additional = data.get("additionalInstructions") or data.get("additionalinstructions") or ""
+        audience = data.get("textOptions_audience") or data.get("textOptions.audience") or ""
+        tone = data.get("textOptions_tone") or data.get("textOptions.tone") or ""
 
-    return {"status": "ok"}
+        logger.info(
+            "Webhook: email=%s themeId=%s numCards=%d format=%s dimensions=%s "
+            "textMode=%s language=%s amount=%s",
+            email, theme_id, num_cards, format_, dimensions, text_mode, language, amount,
+        )
+
+        background_tasks.add_task(
+            generate_and_notify,
+            email, theme_id, product_name, num_cards,
+            format_, dimensions, text_mode, language, amount, input_text, additional, audience, tone,
+        )
+
+        return {"status": "ok"}
+
+    except Exception as e:
+        logger.error(f"Webhook error: {e}", exc_info=True)
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
 
 
 @app.get("/api/health")
