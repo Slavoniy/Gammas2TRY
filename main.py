@@ -449,6 +449,11 @@ async def webhook_tilda(request: Request, background_tasks: BackgroundTasks):
             )
             return JSONResponse({"status": "forbidden"}, status_code=403)
 
+    # Тильда шлёт тестовый ping при добавлении webhook — отвечаем 200
+    if data.get("test") == "test" or (not data.get("email") and not data.get("Email") and not data.get("payment")):
+        logger.info("Webhook: получен тестовый запрос от Тильды, отвечаем 200 OK")
+        return JSONResponse({"status": "ok", "message": "webhook connected"})
+
     # 4. Extract fields
     email = data.get("email", "")
     products = data.get("payment", {}).get("products", [])
