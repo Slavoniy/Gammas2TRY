@@ -3,14 +3,11 @@ import re
 import asyncio
 import json
 import logging
-import smtplib
-import ssl
 import uuid
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from typing import Optional
 
 import httpx
+import requests
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,11 +41,9 @@ MOCK_MODE = os.getenv("MOCK_MODE", "false").lower() == "true"
 
 TILDA_SECRET = os.getenv("TILDA_SECRET")
 
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.timeweb.cloud")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-SMTP_FROM = os.getenv("SMTP_FROM", "")
+NOTISEND_API_KEY = os.getenv("NOTISEND_API_KEY", "")
+NOTISEND_FROM_EMAIL = os.getenv("NOTISEND_FROM_EMAIL", "noreply@presentaciya.ru")
+NOTISEND_FROM_NAME = os.getenv("NOTISEND_FROM_NAME", "presentaciya.ru")
 
 DEFAULT_GENERATION_PARAMS = {
     "format": "presentation",
@@ -84,62 +79,80 @@ class GenerateRequest(BaseModel):
     exportAs: str  # 'pdf' or 'pptx'
 
 
-def send_download_email(email: str, download_url: str, product_name: str) -> None:
-    if not SMTP_USER or not SMTP_PASSWORD or not SMTP_FROM:
-        logger.error(
-            "SMTP не настроен! SMTP_USER=%s, SMTP_FROM=%s, SMTP_PASSWORD=%s",
-            SMTP_USER, SMTP_FROM, "***" if SMTP_PASSWORD else "ПУСТО",
-        )
+def send_download_email(
+    email: str,
+    download_url: str,
+    theme_name: str,
+    num_cards: int,
+) -> None:
+    if not NOTISEND_API_KEY:
+        logger.error("NOTISEND_API_KEY не задан — email не отправлен")
         return
 
-    logger.info(
-        "Отправка email: to=%s, from=%s, host=%s:%s",
-        email, SMTP_FROM, SMTP_HOST, SMTP_PORT,
-    )
-
-    html_body = f"""
+    html = f"""
     <html>
-    <body style="font-family: Arial, sans-serif; color: #333;">
-        <p>Здравствуйте!</p>
-        <p>Ваша презентация <strong>"{product_name}"</strong> готова.</p>
-        <p>Скачать можно по ссылке (действительна 24 часа):</p>
-        <p>
+    <body style="font-family:Arial,sans-serif;max-width:600px;
+                 margin:0 auto;padding:20px;background:#f9f9f9;">
+        <div style="background:white;padding:30px;border-radius:12px;">
+            <h2 style="color:#7C3AED;margin-top:0;">
+                Ваша презентация готова! 🎉
+            </h2>
+            <p style="color:#333;">
+                Тема: <strong>{theme_name}</strong><br>
+                Количество слайдов: <strong>{num_cards}</strong>
+            </p>
+            <p style="color:#333;">Скачайте файл по ссылке:</p>
             <a href="{download_url}"
-               style="display:inline-block;padding:12px 24px;background:#4F46E5;color:#fff;
-                      text-decoration:none;border-radius:6px;font-weight:bold;">
-                СКАЧАТЬ ПРЕЗЕНТАЦИЮ
+               style="display:inline-block;padding:14px 28px;
+                      background:#7C3AED;color:#fff;
+                      text-decoration:none;border-radius:8px;
+                      font-size:16px;font-weight:bold;">
+                Скачать презентацию →
             </a>
-        </p>
-        <p>С уважением,<br>Команда сервиса</p>
+            <p style="color:#888;font-size:12px;margin-top:30px;
+                      border-top:1px solid #eee;padding-top:20px;">
+                С уважением, команда presentaciya.ru<br>
+                Если кнопка не работает, скопируйте ссылку:<br>
+                <a href="{download_url}" style="color:#7C3AED;">
+                    {download_url}
+                </a>
+            </p>
+        </div>
     </body>
     </html>
     """
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Ваша презентация готова!"
-    msg["From"] = SMTP_FROM
-    msg["To"] = email
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
-
     try:
-        logger.info("Подключение к SMTP %s:%s...", SMTP_HOST, SMTP_PORT)
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            logger.info("SMTP подключён, авторизация...")
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            logger.info("Авторизация успешна, отправка на %s...", email)
-            server.sendmail(SMTP_FROM, email, msg.as_string())
-        logger.info("Email успешно отправлен на %s", email)
-    except smtplib.SMTPAuthenticationError as e:
-        logger.error("SMTP ошибка авторизации: %s", e)
-    except smtplib.SMTPConnectError as e:
-        logger.error("SMTP ошибка подключения к %s:%s: %s", SMTP_HOST, SMTP_PORT, e)
-    except smtplib.SMTPException as e:
-        logger.error("SMTP ошибка: %s", e)
+        response = requests.post(
+            "https://api.notisend.ru/v1/email/messages",
+            headers={
+                "Authorization": f"Bearer {NOTISEND_API_KEY}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            json={
+                "to": email,
+                "from_email": NOTISEND_FROM_EMAIL,
+                "from_name": NOTISEND_FROM_NAME,
+                "subject": "Ваша презентация готова! 🎉",
+                "html": html,
+            },
+            timeout=15,
+        )
+
+        if response.status_code in (200, 201, 202):
+            msg_id = response.json().get("id", "unknown")
+            logger.info("✅ Email отправлен через NotiSend: id=%s, to=%s", msg_id, email)
+        else:
+            logger.error(
+                "❌ NotiSend ошибка: status=%s, body=%s",
+                response.status_code, response.text,
+            )
+
+    except requests.RequestException as e:
+        logger.error("❌ NotiSend HTTP ошибка: %s", e, exc_info=True)
     except Exception as e:
-        logger.error("Неизвестная ошибка отправки email: %s", e, exc_info=True)
+        logger.error("❌ NotiSend неизвестная ошибка: %s", e, exc_info=True)
 
 
 def extract_num_cards_from_options(options: list) -> int:
@@ -257,7 +270,7 @@ def parse_tilda_payment(body: dict) -> dict:
     return {"products": result}
 
 
-async def poll_and_notify(generation_id: str, email: str, product_name: str) -> None:
+async def poll_and_notify(generation_id: str, email: str, product_name: str, num_cards: int = 0) -> None:
     for attempt in range(60):
         await asyncio.sleep(5)
         logger.debug("Polling generation id=%s, attempt=%d", generation_id, attempt + 1)
@@ -270,7 +283,7 @@ async def poll_and_notify(generation_id: str, email: str, product_name: str) -> 
                     "Generation completed (mock), id=%s, emailing %s", generation_id, email
                 )
                 await asyncio.to_thread(
-                    send_download_email, email, mock_url, product_name
+                    send_download_email, email, mock_url, product_name, num_cards
                 )
                 return
             continue
@@ -296,7 +309,7 @@ async def poll_and_notify(generation_id: str, email: str, product_name: str) -> 
                     "Generation completed, id=%s, email sent to %s", generation_id, email
                 )
                 await asyncio.to_thread(
-                    send_download_email, email, download_url or "", product_name
+                    send_download_email, email, download_url or "", product_name, num_cards
                 )
                 return
             elif status in ("failed", "cancelled", "error"):
@@ -331,7 +344,7 @@ async def generate_and_notify(
     if MOCK_MODE:
         generation_id = str(uuid.uuid4())
         logger.info("Generation started (mock), id=%s", generation_id)
-        await poll_and_notify(generation_id, email, product_name)
+        await poll_and_notify(generation_id, email, product_name, num_cards)
         return
 
     payload = {
@@ -373,7 +386,7 @@ async def generate_and_notify(
             return
 
         logger.info("Generation started, id=%s", generation_id)
-        await poll_and_notify(generation_id, email, product_name)
+        await poll_and_notify(generation_id, email, product_name, num_cards)
 
     except Exception:
         logger.error("Failed to start generation for email=%s", email, exc_info=True)
