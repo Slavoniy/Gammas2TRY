@@ -6,6 +6,7 @@ import logging
 import subprocess
 import tempfile
 import uuid
+from datetime import datetime
 from typing import Optional
 
 import boto3
@@ -100,10 +101,14 @@ def send_download_email(
         logger.error("NOTISEND_API_KEY не задан — email не отправлен")
         return
 
+    filename_base = make_filename(theme_name, num_cards)
+
     buttons = ""
     if pdf_url:
         buttons += f"""
         <a href="{pdf_url}"
+           download="{filename_base}.pdf"
+           target="_blank"
            style="display:inline-block;padding:14px 28px;background:#7C3AED;color:#fff;
                   text-decoration:none;border-radius:8px;font-size:16px;
                   font-weight:bold;margin:8px 8px 8px 0;">
@@ -112,6 +117,8 @@ def send_download_email(
     if pptx_url:
         buttons += f"""
         <a href="{pptx_url}"
+           download="{filename_base}.pptx"
+           target="_blank"
            style="display:inline-block;padding:14px 28px;background:#06B6D4;color:#fff;
                   text-decoration:none;border-radius:8px;font-size:16px;
                   font-weight:bold;margin:8px 0;">
@@ -230,6 +237,34 @@ def convert_pptx_to_pdf(pptx_bytes: bytes) -> Optional[bytes]:
     except Exception as e:
         logger.error("Ошибка конвертации: %s", e, exc_info=True)
         return None
+
+
+def transliterate(text: str) -> str:
+    mapping = {
+        'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo',
+        'ж':'zh','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m',
+        'н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u',
+        'ф':'f','х':'kh','ц':'ts','ч':'ch','ш':'sh','щ':'shch',
+        'ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya',
+        'А':'A','Б':'B','В':'V','Г':'G','Д':'D','Е':'E','Ё':'Yo',
+        'Ж':'Zh','З':'Z','И':'I','Й':'Y','К':'K','Л':'L','М':'M',
+        'Н':'N','О':'O','П':'P','Р':'R','С':'S','Т':'T','У':'U',
+        'Ф':'F','Х':'Kh','Ц':'Ts','Ч':'Ch','Ш':'Sh','Щ':'Shch',
+        'Ъ':'','Ы':'Y','Ь':'','Э':'E','Ю':'Yu','Я':'Ya',
+    }
+    result = ""
+    for char in text:
+        result += mapping.get(char, char)
+    return result
+
+
+def make_filename(theme_name: str, num_cards: int) -> str:
+    clean = theme_name.replace("Презентация ", "").replace("для ", "dlya-")
+    translit = transliterate(clean)
+    safe = re.sub(r'[^a-zA-Z0-9\-]', '-', translit)
+    safe = re.sub(r'-+', '-', safe).strip('-')[:40].strip('-')
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    return f"{safe}_{num_cards}sl_{date_str}"
 
 
 def extract_num_cards_from_options(options: list) -> int:
@@ -413,11 +448,12 @@ async def poll_and_notify(generation_id: str, email: str, product_name: str, num
     pdf_bytes = await asyncio.to_thread(convert_pptx_to_pdf, pptx_bytes)
 
     # Upload both files to S3
-    file_id = str(uuid.uuid4())[:8]
+    filename_base = make_filename(product_name, num_cards)
+    folder_id = str(uuid.uuid4())[:8]
     pptx_s3_url = await asyncio.to_thread(
         upload_to_s3,
         pptx_bytes,
-        f"presentations/{file_id}/presentation.pptx",
+        f"presentations/{folder_id}/{filename_base}.pptx",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     )
     pdf_s3_url = ""
@@ -425,7 +461,7 @@ async def poll_and_notify(generation_id: str, email: str, product_name: str, num
         pdf_s3_url = await asyncio.to_thread(
             upload_to_s3,
             pdf_bytes,
-            f"presentations/{file_id}/presentation.pdf",
+            f"presentations/{folder_id}/{filename_base}.pdf",
             "application/pdf",
         )
     else:
