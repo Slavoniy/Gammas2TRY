@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 httpx
 requests
+boto3
 pydantic
 python-dotenv
 python-multipart
