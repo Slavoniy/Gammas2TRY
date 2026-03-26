@@ -3,11 +3,15 @@ import re
 import asyncio
 import json
 import logging
+import subprocess
+import tempfile
 import uuid
 from typing import Optional
 
+import boto3
 import httpx
 import requests
+from botocore.client import Config
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,6 +49,12 @@ NOTISEND_API_KEY = os.getenv("NOTISEND_API_KEY", "")
 NOTISEND_FROM_EMAIL = os.getenv("NOTISEND_FROM_EMAIL", "noreply@presentaciya.ru")
 NOTISEND_FROM_NAME = os.getenv("NOTISEND_FROM_NAME", "presentaciya.ru")
 
+S3_ENDPOINT   = os.getenv("S3_ENDPOINT", "https://s3.timeweb.cloud")
+S3_BUCKET     = os.getenv("S3_BUCKET", "")
+S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "")
+S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "")
+S3_REGION     = os.getenv("S3_REGION", "ru-1")
+
 DEFAULT_GENERATION_PARAMS = {
     "format": "presentation",
     "dimensions": "16x9",
@@ -81,13 +91,38 @@ class GenerateRequest(BaseModel):
 
 def send_download_email(
     email: str,
-    download_url: str,
+    pdf_url: str,
+    pptx_url: str,
     theme_name: str,
     num_cards: int,
 ) -> None:
     if not NOTISEND_API_KEY:
         logger.error("NOTISEND_API_KEY не задан — email не отправлен")
         return
+
+    buttons = ""
+    if pdf_url:
+        buttons += f"""
+        <a href="{pdf_url}"
+           style="display:inline-block;padding:14px 28px;background:#7C3AED;color:#fff;
+                  text-decoration:none;border-radius:8px;font-size:16px;
+                  font-weight:bold;margin:8px 8px 8px 0;">
+            Скачать PDF →
+        </a>"""
+    if pptx_url:
+        buttons += f"""
+        <a href="{pptx_url}"
+           style="display:inline-block;padding:14px 28px;background:#06B6D4;color:#fff;
+                  text-decoration:none;border-radius:8px;font-size:16px;
+                  font-weight:bold;margin:8px 0;">
+            Скачать PPTX →
+        </a>"""
+
+    links_fallback = ""
+    if pdf_url:
+        links_fallback += f'PDF: <a href="{pdf_url}" style="color:#7C3AED;">{pdf_url}</a><br>'
+    if pptx_url:
+        links_fallback += f'PPTX: <a href="{pptx_url}" style="color:#06B6D4;">{pptx_url}</a>'
 
     html = f"""
     <html>
@@ -102,20 +137,12 @@ def send_download_email(
                 Количество слайдов: <strong>{num_cards}</strong>
             </p>
             <p style="color:#333;">Скачайте файл по ссылке:</p>
-            <a href="{download_url}"
-               style="display:inline-block;padding:14px 28px;
-                      background:#7C3AED;color:#fff;
-                      text-decoration:none;border-radius:8px;
-                      font-size:16px;font-weight:bold;">
-                Скачать презентацию →
-            </a>
+            {buttons}
             <p style="color:#888;font-size:12px;margin-top:30px;
                       border-top:1px solid #eee;padding-top:20px;">
                 С уважением, команда presentaciya.ru<br>
-                Если кнопка не работает, скопируйте ссылку:<br>
-                <a href="{download_url}" style="color:#7C3AED;">
-                    {download_url}
-                </a>
+                Если кнопки не работают, скопируйте ссылки:<br>
+                {links_fallback}
             </p>
         </div>
     </body>
@@ -153,6 +180,56 @@ def send_download_email(
         logger.error("❌ NotiSend HTTP ошибка: %s", e, exc_info=True)
     except Exception as e:
         logger.error("❌ NotiSend неизвестная ошибка: %s", e, exc_info=True)
+
+
+def upload_to_s3(file_bytes: bytes, filename: str, content_type: str) -> str:
+    try:
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=S3_ENDPOINT,
+            aws_access_key_id=S3_ACCESS_KEY,
+            aws_secret_access_key=S3_SECRET_KEY,
+            region_name=S3_REGION,
+            config=Config(signature_version="s3v4"),
+        )
+        s3.put_object(
+            Bucket=S3_BUCKET,
+            Key=filename,
+            Body=file_bytes,
+            ContentType=content_type,
+            ACL="public-read",
+        )
+        url = f"{S3_ENDPOINT}/{S3_BUCKET}/{filename}"
+        logger.info("✅ Загружено в S3: %s", url)
+        return url
+    except Exception as e:
+        logger.error("❌ Ошибка S3: %s", e, exc_info=True)
+        return ""
+
+
+def convert_pptx_to_pdf(pptx_bytes: bytes) -> Optional[bytes]:
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pptx_path = os.path.join(tmpdir, "presentation.pptx")
+            pdf_path  = os.path.join(tmpdir, "presentation.pdf")
+            with open(pptx_path, "wb") as f:
+                f.write(pptx_bytes)
+            result = subprocess.run(
+                ["libreoffice", "--headless", "--convert-to", "pdf",
+                 "--outdir", tmpdir, pptx_path],
+                capture_output=True, timeout=60,
+            )
+            if result.returncode != 0:
+                logger.error("LibreOffice ошибка: %s", result.stderr.decode())
+                return None
+            with open(pdf_path, "rb") as f:
+                return f.read()
+    except subprocess.TimeoutExpired:
+        logger.error("LibreOffice timeout при конвертации")
+        return None
+    except Exception as e:
+        logger.error("Ошибка конвертации: %s", e, exc_info=True)
+        return None
 
 
 def extract_num_cards_from_options(options: list) -> int:
@@ -271,56 +348,93 @@ def parse_tilda_payment(body: dict) -> dict:
 
 
 async def poll_and_notify(generation_id: str, email: str, product_name: str, num_cards: int = 0) -> None:
-    for attempt in range(60):
-        await asyncio.sleep(5)
-        logger.debug("Polling generation id=%s, attempt=%d", generation_id, attempt + 1)
+    logger.info("Polling: id=%s, email=%s", generation_id, email)
 
-        if MOCK_MODE:
-            import random
+    if MOCK_MODE:
+        import random
+        for _ in range(60):
+            await asyncio.sleep(5)
             if random.random() < 0.3:
-                mock_url = f"https://mock-download.example.com/{generation_id}.pdf"
-                logger.info(
-                    "Generation completed (mock), id=%s, emailing %s", generation_id, email
-                )
+                mock_url = f"https://mock-download.example.com/{generation_id}.pptx"
+                logger.info("Generation completed (mock), id=%s, emailing %s", generation_id, email)
                 await asyncio.to_thread(
-                    send_download_email, email, mock_url, product_name, num_cards
+                    send_download_email, email, "", mock_url, product_name, num_cards
                 )
                 return
-            continue
+        logger.error("Generation timed out (mock), id=%s", generation_id)
+        return
 
-        try:
-            async with httpx.AsyncClient() as client:
+    # Poll Gamma API until completed
+    gamma_url = None
+    async with httpx.AsyncClient() as client:
+        for attempt in range(1, 61):
+            await asyncio.sleep(5)
+            try:
                 response = await client.get(
                     f"{GAMMA_BASE_URL}/generations/{generation_id}",
                     headers=get_headers(),
                 )
                 response.raise_for_status()
                 data = response.json()
+                status = data.get("status")
+                logger.debug("attempt=%d, status=%s", attempt, status)
+                if status == "completed":
+                    gamma_url = (
+                        data.get("exportUrl")
+                        or data.get("export_url")
+                        or data.get("exportLinks", {}).get("pptx")
+                        or data.get("exportLinks", {}).get("pdf")
+                    )
+                    break
+                elif status in ("failed", "cancelled", "error"):
+                    logger.error("Генерация провалилась: %s", status)
+                    return
+            except Exception as e:
+                logger.error("Polling error attempt=%d: %s", attempt, e)
 
-            status = data.get("status")
-            logger.debug("Generation id=%s status=%s", generation_id, status)
+    if not gamma_url:
+        logger.error("Нет ссылки после polling для %s", generation_id)
+        return
 
-            if status == "completed":
-                download_url = data.get("exportUrl") or data.get("export_url")
-                if not download_url:
-                    export_links = data.get("exportLinks", {})
-                    download_url = export_links.get("pdf") or export_links.get("pptx")
-                logger.info(
-                    "Generation completed, id=%s, email sent to %s", generation_id, email
-                )
-                await asyncio.to_thread(
-                    send_download_email, email, download_url or "", product_name, num_cards
-                )
-                return
-            elif status in ("failed", "cancelled", "error"):
-                logger.error(
-                    "Generation id=%s failed with status=%s", generation_id, status
-                )
-                return
-        except Exception:
-            logger.error("Error polling generation id=%s", generation_id, exc_info=True)
+    # Download PPTX from Gamma
+    logger.info("Скачиваем PPTX: %s", gamma_url)
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(gamma_url, timeout=60)
+            resp.raise_for_status()
+            pptx_bytes = resp.content
+            logger.info("PPTX скачан: %d байт", len(pptx_bytes))
+        except Exception as e:
+            logger.error("Ошибка скачивания PPTX: %s", e)
+            return
 
-    logger.error("Generation timed out after 60 attempts, id=%s", generation_id)
+    # Convert to PDF (blocking — run in thread)
+    logger.info("Конвертируем PPTX → PDF...")
+    pdf_bytes = await asyncio.to_thread(convert_pptx_to_pdf, pptx_bytes)
+
+    # Upload both files to S3
+    file_id = str(uuid.uuid4())[:8]
+    pptx_s3_url = await asyncio.to_thread(
+        upload_to_s3,
+        pptx_bytes,
+        f"presentations/{file_id}/presentation.pptx",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    )
+    pdf_s3_url = ""
+    if pdf_bytes:
+        pdf_s3_url = await asyncio.to_thread(
+            upload_to_s3,
+            pdf_bytes,
+            f"presentations/{file_id}/presentation.pdf",
+            "application/pdf",
+        )
+    else:
+        logger.warning("PDF конвертация не удалась — отправляем только PPTX")
+
+    # Send email with both download links
+    await asyncio.to_thread(
+        send_download_email, email, pdf_s3_url, pptx_s3_url, product_name, num_cards
+    )
 
 
 async def generate_and_notify(
@@ -349,7 +463,7 @@ async def generate_and_notify(
 
     payload = {
         "format": format_,
-        "exportAs": DEFAULT_GENERATION_PARAMS["exportAs"],
+        "exportAs": "pptx",
         "textMode": text_mode,
         "inputText": input_text,
         "numCards": num_cards,
