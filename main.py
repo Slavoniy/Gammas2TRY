@@ -6,6 +6,7 @@ import logging
 import subprocess
 import tempfile
 import uuid
+import urllib.parse
 from datetime import datetime
 from typing import Optional
 
@@ -14,7 +15,7 @@ import httpx
 import requests
 from botocore.client import Config
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -55,6 +56,8 @@ S3_BUCKET     = os.getenv("S3_BUCKET", "")
 S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "")
 S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "")
 S3_REGION     = os.getenv("S3_REGION", "ru-1")
+
+BACKEND_URL = os.getenv("BACKEND_URL", "https://slavoniy-gammas2try-7fe3.twc1.net")
 
 DEFAULT_GENERATION_PARAMS = {
     "format": "presentation",
@@ -110,6 +113,12 @@ class GenerateRequest(BaseModel):
     language: str = "ru"
     themeId: Optional[str] = None
     exportAs: str  # 'pdf' or 'pptx'
+
+
+def make_download_url(s3_url: str, filename: str) -> str:
+    encoded_url  = urllib.parse.quote(s3_url, safe='')
+    encoded_name = urllib.parse.quote(filename, safe='')
+    return f"{BACKEND_URL}/download?url={encoded_url}&filename={encoded_name}"
 
 
 def send_download_email(
@@ -489,9 +498,12 @@ async def poll_and_notify(generation_id: str, email: str, product_name: str, num
     else:
         logger.warning("PDF конвертация не удалась — отправляем только PPTX")
 
-    # Send email with both download links
+    # Wrap S3 URLs through backend download endpoint (forces browser download)
+    pdf_download_url  = make_download_url(pdf_s3_url,  f"{filename_base}.pdf")  if pdf_s3_url  else ""
+    pptx_download_url = make_download_url(pptx_s3_url, f"{filename_base}.pptx") if pptx_s3_url else ""
+
     await asyncio.to_thread(
-        send_download_email, email, pdf_s3_url, pptx_s3_url, product_name, num_cards
+        send_download_email, email, pdf_download_url, pptx_download_url, product_name, num_cards
     )
 
 
@@ -856,6 +868,36 @@ async def webhook_tilda(request: Request, background_tasks: BackgroundTasks):
     except Exception as e:
         logger.error(f"Webhook error: {e}", exc_info=True)
         return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+
+@app.get("/download")
+async def download_file(url: str, filename: str):
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, timeout=60, follow_redirects=True)
+            resp.raise_for_status()
+
+        if filename.endswith(".pdf"):
+            content_type = "application/pdf"
+        elif filename.endswith(".pptx"):
+            content_type = (
+                "application/vnd.openxmlformats-officedocument"
+                ".presentationml.presentation"
+            )
+        else:
+            content_type = "application/octet-stream"
+
+        headers = {
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        }
+        return StreamingResponse(
+            iter([resp.content]),
+            headers=headers,
+            media_type=content_type,
+        )
+    except Exception as e:
+        logger.error("Ошибка download endpoint: %s", e)
+        raise HTTPException(status_code=500, detail="Ошибка скачивания файла")
 
 
 @app.get("/api/health")
