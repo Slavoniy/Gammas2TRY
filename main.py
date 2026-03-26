@@ -128,6 +128,73 @@ def extract_num_cards_from_options(options: list) -> int:
     return 10
 
 
+def map_format(value: str) -> str:
+    mapping = {
+        "презентация": "presentation",
+        "документ": "document",
+        "пост для соцсетей": "webpage",
+        "presentation": "presentation",
+        "document": "document",
+        "webpage": "webpage",
+    }
+    return mapping.get(value.lower().strip(), "presentation")
+
+
+def map_text_mode(value: str) -> str:
+    mapping = {
+        "сгенерировать с нуля": "generate",
+        "оставить только главное": "condense",
+        "полностью сохранить": "preserve",
+        "generate": "generate",
+        "condense": "condense",
+        "preserve": "preserve",
+    }
+    return mapping.get(value.lower().strip(), "generate")
+
+
+def map_amount(value: str) -> str:
+    mapping = {
+        "краткий - больше визуализаций, меньше текста": "brief",
+        "средний - дает баланс текста и дизайна": "medium",
+        "подробный - более плотное заполнение слайда текстом": "detailed",
+        "обширный - максимальное количество текста на каждой карточке": "extensive",
+        "краткий": "brief",
+        "средний": "medium",
+        "подробный": "detailed",
+        "обширный": "extensive",
+        "brief": "brief",
+        "medium": "medium",
+        "detailed": "detailed",
+        "extensive": "extensive",
+    }
+    return mapping.get(value.lower().strip(), "medium")
+
+
+def map_language(value: str) -> str:
+    mapping = {
+        "русский": "ru", "английский": "en", "испанский": "es",
+        "немецкий": "de", "французский": "fr", "итальянский": "it",
+        "португальский": "pt", "китайский": "zh", "японский": "ja",
+        "корейский": "ko", "арабский": "ar", "казахский": "kk",
+        "сербский": "sr", "узбекский": "uz", "турецкий": "tr",
+        "ru": "ru", "en": "en", "es": "es", "de": "de",
+        "fr": "fr", "it": "it", "pt": "pt", "zh": "zh",
+        "ja": "ja", "ko": "ko", "ar": "ar", "kk": "kk",
+        "sr": "sr", "uz": "uz", "tr": "tr",
+    }
+    return mapping.get(value.lower().strip(), "ru")
+
+
+def map_dimensions(value: str) -> str:
+    mapping = {
+        "16:9": "16x9", "16x9": "16x9",
+        "4:3": "4x3", "4x3": "4x3",
+        "а4": "a4", "a4": "a4",
+        "квадрат 1:1": "16x9", "1x1": "16x9",
+    }
+    return mapping.get(value.lower().strip(), "16x9")
+
+
 async def poll_and_notify(generation_id: str, email: str, product_name: str) -> None:
     for attempt in range(60):
         await asyncio.sleep(5)
@@ -182,9 +249,22 @@ async def poll_and_notify(generation_id: str, email: str, product_name: str) -> 
 
 
 async def generate_and_notify(
-    email: str, theme_id: Optional[str], product_name: str, num_cards: int
+    email: str,
+    theme_id: Optional[str],
+    product_name: str,
+    num_cards: int,
+    format_: str = "presentation",
+    dimensions: str = "16x9",
+    text_mode: str = "generate",
+    language: str = "ru",
+    amount: str = "medium",
+    input_text: Optional[str] = None,
+    additional: str = "",
+    audience: str = "",
+    tone: str = "",
 ) -> None:
-    input_text = f"Создай презентацию на тему: {product_name}"
+    if not input_text:
+        input_text = f"Создай презентацию на тему: {product_name}"
 
     if MOCK_MODE:
         generation_id = str(uuid.uuid4())
@@ -193,20 +273,25 @@ async def generate_and_notify(
         return
 
     payload = {
-        "format": DEFAULT_GENERATION_PARAMS["format"],
+        "format": format_,
         "exportAs": DEFAULT_GENERATION_PARAMS["exportAs"],
-        "textMode": DEFAULT_GENERATION_PARAMS["textMode"],
+        "textMode": text_mode,
         "inputText": input_text,
         "numCards": num_cards,
         "textOptions": {
-            "amount": DEFAULT_GENERATION_PARAMS["amount"],
-            "language": DEFAULT_GENERATION_PARAMS["language"],
+            "amount": amount,
+            "language": language,
         },
         "imageOptions": DEFAULT_GENERATION_PARAMS["imageOptions"],
-        "cardOptions": {
-            "dimensions": DEFAULT_GENERATION_PARAMS["dimensions"],
-        },
     }
+    if format_ != "webpage":
+        payload["cardOptions"] = {"dimensions": dimensions}
+    if additional:
+        payload["additionalInstructions"] = additional
+    if tone:
+        payload["textOptions"]["tone"] = tone
+    if audience:
+        payload["textOptions"]["audience"] = audience
     if theme_id:
         payload["themeId"] = theme_id
 
@@ -465,14 +550,37 @@ async def webhook_tilda(request: Request, background_tasks: BackgroundTasks):
     product_name = product.get("name", "Презентация")
     num_cards = extract_num_cards_from_options(product.get("options", []))
 
+    # Map Tilda field values (Russian labels → Gamma API codes)
+    # Tilda sends nested keys with underscores: cardOptions_dimensions
+    format_ = map_format(data.get("format", "presentation"))
+    dimensions = map_dimensions(
+        data.get("cardOptions_dimensions") or data.get("cardOptions.dimensions") or "16:9"
+    )
+    text_mode = map_text_mode(
+        data.get("textMode") or data.get("textmode") or "generate"
+    )
+    language = map_language(
+        data.get("textOptions_language") or data.get("textOptions.language") or "русский"
+    )
+    amount = map_amount(
+        data.get("textOptions_amount") or data.get("textOptions.amount") or "medium"
+    )
+    input_text = data.get("inputText") or data.get("inputtext") or ""
+    additional = data.get("additionalInstructions") or data.get("additionalinstructions") or ""
+    audience = data.get("textOptions_audience") or data.get("textOptions.audience") or ""
+    tone = data.get("textOptions_tone") or data.get("textOptions.tone") or ""
+
     logger.info(
-        "Webhook received from Tilda, email=%s, themeId=%s, numCards=%d",
-        email,
-        theme_id,
-        num_cards,
+        "Webhook: email=%s themeId=%s numCards=%d format=%s dimensions=%s "
+        "textMode=%s language=%s amount=%s",
+        email, theme_id, num_cards, format_, dimensions, text_mode, language, amount,
     )
 
-    background_tasks.add_task(generate_and_notify, email, theme_id, product_name, num_cards)
+    background_tasks.add_task(
+        generate_and_notify,
+        email, theme_id, product_name, num_cards,
+        format_, dimensions, text_mode, language, amount, input_text, additional, audience, tone,
+    )
 
     return {"status": "ok"}
 
