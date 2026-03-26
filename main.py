@@ -70,26 +70,33 @@ DEFAULT_GENERATION_PARAMS = {
 }
 
 DIMENSIONS_MAPPING = {
-    # Презентации
-    "презентация 16:9":               {"format": "presentation", "dim": "16x9"},
-    "презентация 4:3":                {"format": "presentation", "dim": "4x3"},
-    # Документ
-    "документ а4":                    {"format": "document",     "dim": "a4"},
-    # Соцсети
-    "пост для соцсетей квадрат 1:1":  {"format": "social",       "dim": "1x1"},
-    "пост для соцсетей истории 9:16": {"format": "social",       "dim": "9x16"},
-    "пост для соцсетей портрет 4:5":  {"format": "social",       "dim": "4x5"},
-    # Технические fallback
-    "16:9":  {"format": "presentation", "dim": "16x9"},
-    "4:3":   {"format": "presentation", "dim": "4x3"},
-    "a4":    {"format": "document",     "dim": "a4"},
-    "а4":    {"format": "document",     "dim": "a4"},
-    "1x1":   {"format": "social",       "dim": "1x1"},
-    "9x16":  {"format": "social",       "dim": "9x16"},
-    "4x5":   {"format": "social",       "dim": "4x5"},
+    # Презентации — PPTX + PDF
+    "презентация 16:9 (pptx + pdf)":  {"format": "presentation", "dim": "16x9",  "pdf": True},
+    "презентация 4:3 (pptx + pdf)":   {"format": "presentation", "dim": "4x3",   "pdf": True},
+    # Документ — PPTX + PDF
+    "документ а4 (pptx + pdf)":       {"format": "document",     "dim": "a4",    "pdf": True},
+    # Соцсети — только PPTX
+    "пост для соцсетей квадрат 1:1 (только pptx)":   {"format": "social", "dim": "1x1",  "pdf": False},
+    "пост для соцсетей истории 9:16 (только pptx)":  {"format": "social", "dim": "9x16", "pdf": False},
+    "пост для соцсетей портрет 4:5 (только pptx)":   {"format": "social", "dim": "4x5",  "pdf": False},
+    # Fallback — старые значения без скобок
+    "презентация 16:9":  {"format": "presentation", "dim": "16x9", "pdf": True},
+    "презентация 4:3":   {"format": "presentation", "dim": "4x3",  "pdf": True},
+    "документ а4":       {"format": "document",     "dim": "a4",   "pdf": True},
+    "пост для соцсетей квадрат 1:1":   {"format": "social", "dim": "1x1",  "pdf": False},
+    "пост для соцсетей истории 9:16":  {"format": "social", "dim": "9x16", "pdf": False},
+    "пост для соцсетей портрет 4:5":   {"format": "social", "dim": "4x5",  "pdf": False},
+    # Технические коды
+    "16:9": {"format": "presentation", "dim": "16x9", "pdf": True},
+    "4:3":  {"format": "presentation", "dim": "4x3",  "pdf": True},
+    "a4":   {"format": "document",     "dim": "a4",   "pdf": True},
+    "а4":   {"format": "document",     "dim": "a4",   "pdf": True},
+    "1x1":  {"format": "social",       "dim": "1x1",  "pdf": False},
+    "9x16": {"format": "social",       "dim": "9x16", "pdf": False},
+    "4x5":  {"format": "social",       "dim": "4x5",  "pdf": False},
 }
 
-DEFAULT_FORMAT = {"format": "presentation", "dim": "16x9"}
+DEFAULT_FORMAT = {"format": "presentation", "dim": "16x9", "pdf": True}
 
 
 def get_headers():
@@ -162,13 +169,18 @@ def send_download_email(
     if pptx_url:
         links_fallback += f'PPTX: <a href="{pptx_url}" style="color:#06B6D4;">{pptx_url}</a>'
 
+    if pptx_url and not pdf_url:
+        subject = "Ваш файл готов! 🎉"
+    else:
+        subject = "Ваша презентация готова! 🎉"
+
     html = f"""
     <html>
     <body style="font-family:Arial,sans-serif;max-width:600px;
                  margin:0 auto;padding:20px;background:#f9f9f9;">
         <div style="background:white;padding:30px;border-radius:12px;">
             <h2 style="color:#7C3AED;margin-top:0;">
-                Ваша презентация готова! 🎉
+                {subject}
             </h2>
             <p style="color:#333;">
                 Тема: <strong>{theme_name}</strong><br>
@@ -199,8 +211,10 @@ def send_download_email(
                 "to": email,
                 "from_email": NOTISEND_FROM_EMAIL,
                 "from_name": NOTISEND_FROM_NAME,
-                "subject": "Ваша презентация готова! 🎉",
+                "subject": subject,
                 "html": html,
+                "track_links": False,
+                "track_read": False,
             },
             timeout=15,
         )
@@ -413,7 +427,7 @@ def parse_tilda_payment(body: dict) -> dict:
     return {"products": result}
 
 
-async def poll_and_notify(generation_id: str, email: str, product_name: str, num_cards: int = 0) -> None:
+async def poll_and_notify(generation_id: str, email: str, product_name: str, num_cards: int = 0, need_pdf: bool = True) -> None:
     logger.info("Polling: id=%s, email=%s", generation_id, email)
 
     if MOCK_MODE:
@@ -480,13 +494,20 @@ async def poll_and_notify(generation_id: str, email: str, product_name: str, num
             logger.error("Ошибка скачивания PPTX: %s", e)
             return
 
-    # Convert to PDF (blocking — run in thread)
-    logger.info("Конвертируем PPTX → PDF...")
-    pdf_bytes = await asyncio.to_thread(convert_pptx_to_pdf, pptx_bytes)
-
-    # Upload both files to S3
+    # Convert to PDF only if required for this format
     filename_base = make_filename(product_name, num_cards)
     folder_id = str(uuid.uuid4())[:8]
+
+    pdf_bytes = None
+    if need_pdf:
+        logger.info("Конвертируем PPTX → PDF...")
+        pdf_bytes = await asyncio.to_thread(convert_pptx_to_pdf, pptx_bytes)
+        if not pdf_bytes:
+            logger.warning("PDF конвертация не удалась — отправляем только PPTX")
+    else:
+        logger.info("PDF не нужен для этого формата, пропускаем конвертацию")
+
+    # Upload both files to S3
     pptx_s3_url = await asyncio.to_thread(
         upload_to_s3,
         pptx_bytes,
@@ -501,8 +522,6 @@ async def poll_and_notify(generation_id: str, email: str, product_name: str, num
             f"presentations/{folder_id}/{filename_base}.pdf",
             "application/pdf",
         )
-    else:
-        logger.warning("PDF конвертация не удалась — отправляем только PPTX")
 
     # Wrap S3 URLs through backend download endpoint (forces browser download)
     pdf_download_url  = make_download_url(pdf_s3_url,  f"{filename_base}.pdf")  if pdf_s3_url  else ""
@@ -527,6 +546,7 @@ async def generate_and_notify(
     additional: str = "",
     audience: str = "",
     tone: str = "",
+    need_pdf: bool = True,
 ) -> None:
     if not input_text:
         input_text = f"Создай презентацию на тему: {product_name}"
@@ -534,7 +554,7 @@ async def generate_and_notify(
     if MOCK_MODE:
         generation_id = str(uuid.uuid4())
         logger.info("Generation started (mock), id=%s", generation_id)
-        await poll_and_notify(generation_id, email, product_name, num_cards)
+        await poll_and_notify(generation_id, email, product_name, num_cards, need_pdf)
         return
 
     payload = {
@@ -576,7 +596,7 @@ async def generate_and_notify(
             return
 
         logger.info("Generation started, id=%s", generation_id)
-        await poll_and_notify(generation_id, email, product_name, num_cards)
+        await poll_and_notify(generation_id, email, product_name, num_cards, need_pdf)
 
     except Exception:
         logger.error("Failed to start generation for email=%s", email, exc_info=True)
@@ -839,9 +859,10 @@ async def webhook_tilda(request: Request, background_tasks: BackgroundTasks):
         format_map = DIMENSIONS_MAPPING.get(dimensions_raw, DEFAULT_FORMAT)
         format_    = format_map["format"]
         dimensions = format_map["dim"]
+        need_pdf   = format_map["pdf"]
         logger.info(
-            "Dimensions raw: '%s' → format=%s, dim=%s",
-            dimensions_raw, format_, dimensions,
+            "Dimensions: '%s' → format=%s, dim=%s, pdf=%s",
+            dimensions_raw, format_, dimensions, need_pdf,
         )
         text_mode = map_text_mode(
             data.get("textMode") or data.get("textmode") or "generate"
@@ -867,6 +888,7 @@ async def webhook_tilda(request: Request, background_tasks: BackgroundTasks):
             generate_and_notify,
             email, theme_id, product_name, num_cards,
             format_, dimensions, text_mode, language, amount, input_text, additional, audience, tone,
+            need_pdf,
         )
 
         return {"status": "ok"}
