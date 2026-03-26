@@ -12,6 +12,7 @@ from typing import Optional
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -411,16 +412,14 @@ async def generate_document(req: GenerateRequest):
 
 @app.post("/webhook/tilda")
 async def webhook_tilda(request: Request, background_tasks: BackgroundTasks):
-    # Optional secret check
-    if TILDA_SECRET:
-        secret = (
-            request.headers.get("X-Tilda-Secret")
-            or request.query_params.get("secret")
-        )
-        if secret != TILDA_SECRET:
-            raise HTTPException(status_code=403, detail="Forbidden")
+    # 1. Read token from headers / query params (before body is consumed)
+    header_token = (
+        request.headers.get("X-Tilda-Secret")
+        or request.headers.get("TILDA_SECRET")
+        or request.query_params.get("secret")
+    )
 
-    # Parse body: JSON or form-urlencoded
+    # 2. Parse body: JSON or form-urlencoded
     content_type = request.headers.get("content-type", "")
     if "application/json" in content_type:
         data = await request.json()
@@ -432,7 +431,25 @@ async def webhook_tilda(request: Request, background_tasks: BackgroundTasks):
         else:
             data = dict(form)
 
-    # Extract fields
+    logger.info(f"Webhook body: {dict(data)}")
+
+    # 3. Final token check: header OR body field
+    if TILDA_SECRET:
+        body_token = (
+            data.get("TILDA_SECRET")
+            or data.get("X-Tilda-Secret")
+            or data.get("api_key")
+            or data.get("secret")
+        )
+        token = header_token or body_token
+        if not token or token != TILDA_SECRET:
+            logger.warning(
+                f"Webhook: неверный токен. "
+                f"Header: {header_token}, Body keys: {list(data.keys())}"
+            )
+            return JSONResponse({"status": "forbidden"}, status_code=403)
+
+    # 4. Extract fields
     email = data.get("email", "")
     products = data.get("payment", {}).get("products", [])
     if not products:
