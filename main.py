@@ -122,9 +122,11 @@ def send_download_email(email: str, download_url: str, product_name: str) -> Non
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
-        context = ssl.create_default_context()
         logger.info("Подключение к SMTP %s:%s...", SMTP_HOST, SMTP_PORT)
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=context) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
             logger.info("SMTP подключён, авторизация...")
             server.login(SMTP_USER, SMTP_PASSWORD)
             logger.info("Авторизация успешна, отправка на %s...", email)
