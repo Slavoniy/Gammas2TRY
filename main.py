@@ -9,6 +9,7 @@ import uuid
 import urllib.parse
 from datetime import datetime
 from typing import Optional
+from contextlib import asynccontextmanager
 
 import boto3
 import httpx
@@ -31,7 +32,37 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 
-app = FastAPI(title="Gamma API Proxy Service")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if S3_BUCKET and S3_ACCESS_KEY:
+        try:
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=S3_ENDPOINT,
+                aws_access_key_id=S3_ACCESS_KEY,
+                aws_secret_access_key=S3_SECRET_KEY,
+                region_name=S3_REGION,
+                config=Config(signature_version="s3v4"),
+            )
+            s3.put_bucket_lifecycle_configuration(
+                Bucket=S3_BUCKET,
+                LifecycleConfiguration={
+                    "Rules": [{
+                        "ID": "delete-presentations-72h",
+                        "Filter": {"Prefix": "presentations/"},
+                        "Status": "Enabled",
+                        "Expiration": {"Days": 3},
+                    }]
+                }
+            )
+            logger.info("✅ S3 lifecycle rule установлен: удаление через 3 дня")
+        except Exception as e:
+            logger.warning("⚠️ Не удалось установить S3 lifecycle rule: %s", e)
+    yield
+
+
+app = FastAPI(title="Gamma API Proxy Service", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -187,6 +218,9 @@ def send_download_email(
                 Количество слайдов: <strong>{num_cards}</strong>
             </p>
             <p style="color:#333;">Скачайте файл по ссылке:</p>
+            <p style="color:#e57373;font-size:13px;margin-top:0;">
+                ⏳ Ссылки действительны 72 часа — успейте скачать!
+            </p>
             {buttons}
             <p style="color:#888;font-size:12px;margin-top:30px;
                       border-top:1px solid #eee;padding-top:20px;">
