@@ -15,7 +15,7 @@ import httpx
 import requests
 from botocore.client import Config
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -125,7 +125,7 @@ class GenerateRequest(BaseModel):
 def make_download_url(s3_url: str, filename: str) -> str:
     encoded_url  = urllib.parse.quote(s3_url, safe='')
     encoded_name = urllib.parse.quote(filename, safe='')
-    return f"{BACKEND_URL}/download?url={encoded_url}&filename={encoded_name}"
+    return f"{BACKEND_URL}/get?url={encoded_url}&filename={encoded_name}"
 
 
 def send_download_email(
@@ -896,6 +896,45 @@ async def webhook_tilda(request: Request, background_tasks: BackgroundTasks):
     except Exception as e:
         logger.error(f"Webhook error: {e}", exc_info=True)
         return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
+
+
+@app.get("/get")
+async def get_file_page(url: str, filename: str):
+    encoded_url  = urllib.parse.quote(url, safe='')
+    encoded_name = urllib.parse.quote(filename, safe='')
+    download_url = f"/download?url={encoded_url}&filename={encoded_name}"
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Скачивание файла</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; display: flex; align-items: center;
+               justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }}
+        .box {{ text-align: center; background: white; padding: 40px; border-radius: 12px;
+                box-shadow: 0 2px 12px rgba(0,0,0,.08); }}
+        h2 {{ color: #7C3AED; margin-top: 0; }}
+        a {{ display: inline-block; margin-top: 20px; padding: 14px 28px;
+             background: #7C3AED; color: white; text-decoration: none;
+             border-radius: 8px; font-size: 16px; font-weight: bold; }}
+    </style>
+    <script>
+        window.onload = function() {{
+            setTimeout(function() {{
+                window.location.href = "{download_url}";
+            }}, 1000);
+        }};
+    </script>
+</head>
+<body>
+    <div class="box">
+        <h2>Ваш файл готов!</h2>
+        <p>Скачивание начнётся автоматически через секунду...</p>
+        <a href="{download_url}">Скачать вручную →</a>
+    </div>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
 
 
 @app.get("/download")
