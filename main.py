@@ -499,6 +499,12 @@ async def poll_and_notify(generation_id: str, email: str, product_name: str, num
                         or data.get("exportLinks", {}).get("pptx")
                         or data.get("exportLinks", {}).get("pdf")
                     )
+                    credits = data.get("credits") or data.get("credit") or {}
+                    logger.info(
+                        "Кредиты Gamma: потрачено=%s, остаток=%s",
+                        credits.get("deducted") if isinstance(credits, dict) else credits,
+                        credits.get("remaining") if isinstance(credits, dict) else "—",
+                    )
                     logger.info(
                         "Генерация завершена id=%s, ждём 30 сек перед скачиванием...",
                         generation_id,
